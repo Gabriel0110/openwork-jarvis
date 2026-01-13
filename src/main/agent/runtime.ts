@@ -23,7 +23,7 @@ let globalWorkspacePath: string | null = null
  * Set the workspace path for filesystem synchronization.
  * When set, files created by the agent will be synced to this directory.
  */
-export function setWorkspacePath(path: string | null) {
+export function setWorkspacePath(path: string | null): void {
   globalWorkspacePath = path
   console.log('[Runtime] Workspace path set to:', path)
 }
@@ -98,7 +98,7 @@ export async function createAgentRuntime(options: CreateAgentRuntimeOptions = {}
   const model = getModelInstance(modelId)
   console.log('[Runtime] Model instance created:', typeof model)
 
-  const saver = await getCheckpointer()
+  const checkpointer = await getCheckpointer()
   console.log('[Runtime] Checkpointer ready')
 
   // Use provided workspace path, fall back to global, or null for no sync
@@ -107,17 +107,18 @@ export async function createAgentRuntime(options: CreateAgentRuntimeOptions = {}
 
   // Using type assertion to work around version compatibility issues
   // between @langchain packages and deepagentsjs types
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agent = createDeepAgent({
-    model: model as any,
-    checkpointer: saver as any,
+    model,
+    checkpointer,
     // Use SyncedStateBackend to enable bidirectional disk sync
-    backend: createSyncedBackendFactory(syncPath) as any
+    backend: createSyncedBackendFactory(syncPath)
   })
 
   console.log('[Runtime] Deep agent created with', syncPath ? 'disk sync' : 'state-only storage')
   return agent
 }
+
+export type DeepAgent = ReturnType<typeof createDeepAgent>
 
 // Clean up resources
 export async function closeRuntime(): Promise<void> {

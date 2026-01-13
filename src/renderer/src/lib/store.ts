@@ -1,5 +1,14 @@
 import { create } from 'zustand'
-import type { Thread, Message, Todo, ModelConfig, Provider, HITLRequest, FileInfo, Subagent } from '@/types'
+import type {
+  Thread,
+  Message,
+  Todo,
+  ModelConfig,
+  Provider,
+  HITLRequest,
+  FileInfo,
+  Subagent
+} from '@/types'
 
 interface AppState {
   // Threads

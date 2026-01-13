@@ -10,6 +10,7 @@ import { WorkspacePicker } from './WorkspacePicker'
 import { ApprovalDialog } from '@/components/hitl/ApprovalDialog'
 import { ElectronIPCTransport } from '@/lib/electron-transport'
 import type { Message } from '@/types'
+import type { DeepAgent } from '../../../../main/agent/types'
 
 interface ChatContainerProps {
   threadId: string
@@ -158,7 +159,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
   )
 
   // Use the useStream hook with our custom transport
-  const stream = useStream({
+  const stream = useStream<DeepAgent>({
     transport,
     threadId,
     messagesKey: 'messages',
@@ -169,7 +170,6 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       console.error('[ChatContainer] Stream error:', error)
     }
   })
-  console.log('[ChatContainer] Stream:', stream.messages)
 
   // Refresh threads when loading state changes from true to false (stream completed)
   const prevLoadingRef = useRef(false)

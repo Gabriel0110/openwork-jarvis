@@ -152,7 +152,9 @@ const api = {
     select: (threadId?: string): Promise<string | null> => {
       return ipcRenderer.invoke('workspace:select', threadId)
     },
-    syncToDisk: (threadId: string): Promise<{
+    syncToDisk: (
+      threadId: string
+    ): Promise<{
       success: boolean
       synced?: string[]
       errors?: string[]

@@ -36,7 +36,9 @@ interface CustomAPI {
   }
   models: {
     list: () => Promise<ModelConfig[]>
+    listProviders: () => Promise<Provider[]>
     getDefault: () => Promise<string>
+    deleteApiKey: (provider: string) => Promise<void>
     setDefault: (modelId: string) => Promise<void>
     setApiKey: (provider: string, apiKey: string) => Promise<void>
     getApiKey: (provider: string) => Promise<string | null>

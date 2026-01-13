@@ -33,15 +33,15 @@ const STATUS_CONFIG = {
   }
 }
 
-export function TodoPanel() {
+export function TodoPanel(): React.JSX.Element {
   const { todos } = useAppStore()
   const [completedExpanded, setCompletedExpanded] = useState(false)
 
   // Group todos by status
-  const inProgress = todos.filter(t => t.status === 'in_progress')
-  const pending = todos.filter(t => t.status === 'pending')
-  const completed = todos.filter(t => t.status === 'completed')
-  const cancelled = todos.filter(t => t.status === 'cancelled')
+  const inProgress = todos.filter((t) => t.status === 'in_progress')
+  const pending = todos.filter((t) => t.status === 'pending')
+  const completed = todos.filter((t) => t.status === 'completed')
+  const cancelled = todos.filter((t) => t.status === 'cancelled')
 
   // Completed section includes both completed and cancelled
   const doneItems = [...completed, ...cancelled]
@@ -59,10 +59,12 @@ export function TodoPanel() {
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-2">
           <span className="text-section-header">PROGRESS</span>
-          <span className="text-data text-sm">{done}/{total}</span>
+          <span className="text-data text-sm">
+            {done}/{total}
+          </span>
         </div>
         <div className="h-1.5 rounded-full bg-background overflow-hidden">
-          <div 
+          <div
             className="h-full bg-status-nominal transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
@@ -73,9 +75,7 @@ export function TodoPanel() {
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-2">
           {!hasAnyTodos ? (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              No tasks yet
-            </div>
+            <div className="text-center text-sm text-muted-foreground py-8">No tasks yet</div>
           ) : (
             <>
               {/* Completed/Cancelled Section (Collapsible) */}
@@ -129,22 +129,26 @@ export function TodoPanel() {
   )
 }
 
-function TodoItem({ todo }: { todo: Todo }) {
+function TodoItem({ todo }: { todo: Todo }): React.JSX.Element {
   const config = STATUS_CONFIG[todo.status]
   const Icon = config.icon
 
   return (
-    <div className={cn(
-      "flex items-start gap-3 rounded-sm border border-border p-3 transition-colors",
-      todo.status === 'completed' && "opacity-60",
-      todo.status === 'cancelled' && "opacity-40"
-    )}>
-      <Icon className={cn("size-4 shrink-0 mt-0.5", config.color)} />
+    <div
+      className={cn(
+        'flex items-start gap-3 rounded-sm border border-border p-3 transition-colors',
+        todo.status === 'completed' && 'opacity-60',
+        todo.status === 'cancelled' && 'opacity-40'
+      )}
+    >
+      <Icon className={cn('size-4 shrink-0 mt-0.5', config.color)} />
       <div className="flex-1 min-w-0">
-        <div className={cn(
-          "text-sm",
-          (todo.status === 'completed' || todo.status === 'cancelled') && "line-through"
-        )}>
+        <div
+          className={cn(
+            'text-sm',
+            (todo.status === 'completed' || todo.status === 'cancelled') && 'line-through'
+          )}
+        >
           {todo.content}
         </div>
       </div>
