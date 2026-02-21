@@ -128,7 +128,13 @@ export class ElectronIPCTransport implements UseStreamTransport {
       messageContent,
       payload.command,
       payload.signal,
-      modelId
+      modelId,
+      payload.config?.configurable?.speaker_type as
+        | "orchestrator"
+        | "agent"
+        | "zeroclaw"
+        | undefined,
+      payload.config?.configurable?.speaker_agent_id as string | undefined
     )
   }
 
@@ -144,13 +150,16 @@ export class ElectronIPCTransport implements UseStreamTransport {
     message: string,
     command: unknown,
     signal: AbortSignal,
-    modelId?: string
+    modelId?: string,
+    speakerType?: "orchestrator" | "agent" | "zeroclaw",
+    speakerAgentId?: string
   ): AsyncGenerator<StreamEvent> {
     // Create a queue to buffer events from IPC
     const eventQueue: StreamEvent[] = []
     let resolveNext: ((value: StreamEvent | null) => void) | null = null
     let isDone = false
     let hasError = false
+    let didCleanup = false
 
     // Generate a run ID for this stream
     const runId = crypto.randomUUID()
@@ -190,57 +199,78 @@ export class ElectronIPCTransport implements UseStreamTransport {
           }
         }
       },
-      modelId
+      modelId,
+      speakerType,
+      speakerAgentId
     )
-
-    // Handle abort signal
-    if (signal) {
-      signal.addEventListener("abort", () => {
-        cleanup()
-        isDone = true
-        if (resolveNext) {
-          const resolve = resolveNext
-          resolveNext = null
-          resolve(null)
-        }
-      })
+    const cleanupOnce = (): void => {
+      if (didCleanup) {
+        return
+      }
+      didCleanup = true
+      cleanup()
     }
 
-    // Yield events as they come in
-    while (!isDone || eventQueue.length > 0) {
-      // Check for queued events first
-      if (eventQueue.length > 0) {
-        const event = eventQueue.shift()!
+    // Handle abort signal
+    const abortHandler = (): void => {
+      cleanupOnce()
+      // Ensure the main process aborts active runtime work, not just UI listeners.
+      window.api.agent.cancel(threadId).catch((error) => {
+        console.warn("[Transport] Failed to cancel active run after abort:", error)
+      })
+      isDone = true
+      if (resolveNext) {
+        const resolve = resolveNext
+        resolveNext = null
+        resolve(null)
+      }
+    }
+    if (signal) {
+      signal.addEventListener("abort", abortHandler)
+    }
+
+    try {
+      // Yield events as they come in
+      while (!isDone || eventQueue.length > 0) {
+        // Check for queued events first
+        if (eventQueue.length > 0) {
+          const event = eventQueue.shift()!
+          if (event.event === "done") {
+            break
+          }
+          if (event.event !== "error" || hasError) {
+            yield event
+          }
+          if (hasError) {
+            break
+          }
+          continue
+        }
+
+        // Wait for the next event
+        const event = await new Promise<StreamEvent | null>((resolve) => {
+          resolveNext = resolve
+        })
+
+        if (event === null) {
+          break
+        }
+
         if (event.event === "done") {
           break
         }
-        if (event.event !== "error" || hasError) {
-          yield event
-        }
-        if (hasError) {
+
+        yield event
+
+        if (event.event === "error") {
           break
         }
-        continue
       }
-
-      // Wait for the next event
-      const event = await new Promise<StreamEvent | null>((resolve) => {
-        resolveNext = resolve
-      })
-
-      if (event === null) {
-        break
+    } finally {
+      if (signal) {
+        signal.removeEventListener("abort", abortHandler)
       }
-
-      if (event.event === "done") {
-        break
-      }
-
-      yield event
-
-      if (event.event === "error") {
-        break
-      }
+      cleanupOnce()
     }
   }
 

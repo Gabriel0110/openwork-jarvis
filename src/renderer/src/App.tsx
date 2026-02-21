@@ -3,6 +3,14 @@ import { ThreadSidebar } from "@/components/sidebar/ThreadSidebar"
 import { TabbedPanel, TabBar } from "@/components/tabs"
 import { RightPanel } from "@/components/panels/RightPanel"
 import { KanbanView, KanbanHeader } from "@/components/kanban"
+import { AgentsView } from "@/components/agents/AgentsView"
+import { GraphView } from "@/components/graph/GraphView"
+import { MemoryView } from "@/components/memory/MemoryView"
+import { ConnectorsView } from "@/components/connectors/ConnectorsView"
+import { TemplatesView } from "@/components/templates/TemplatesView"
+import { ToolsView } from "@/components/tools/ToolsView"
+import { ZeroClawView } from "@/components/zeroclaw/ZeroClawView"
+import { SettingsView } from "@/components/settings/SettingsView"
 import { ResizeHandle } from "@/components/ui/resizable"
 import { useAppStore } from "@/lib/store"
 import { ThreadProvider } from "@/lib/thread-context"
@@ -17,7 +25,21 @@ const RIGHT_MAX = 450
 const RIGHT_DEFAULT = 320
 
 function App(): React.JSX.Element {
-  const { currentThreadId, loadThreads, createThread, showKanbanView } = useAppStore()
+  const {
+    currentThreadId,
+    loadThreads,
+    createThread,
+    showKanbanView,
+    showAgentsView,
+    showGraphView,
+    showMemoryView,
+    showConnectorsView,
+    showTemplatesView,
+    showToolsView,
+    showZeroClawView,
+    showSettingsView,
+    loadAgents
+  } = useAppStore()
   const [isLoading, setIsLoading] = useState(true)
   const [leftWidth, setLeftWidth] = useState(LEFT_DEFAULT)
   const [rightWidth, setRightWidth] = useState(RIGHT_DEFAULT)
@@ -97,6 +119,7 @@ function App(): React.JSX.Element {
     async function init(): Promise<void> {
       try {
         await loadThreads()
+        await loadAgents()
         // Create a default thread if none exist
         const threads = useAppStore.getState().threads
         if (threads.length === 0) {
@@ -109,7 +132,7 @@ function App(): React.JSX.Element {
       }
     }
     init()
-  }, [loadThreads, createThread])
+  }, [loadThreads, loadAgents, createThread])
 
   if (isLoading) {
     return (
@@ -152,6 +175,24 @@ function App(): React.JSX.Element {
             <div className="flex-1 min-w-0 bg-background border-b border-border">
               {showKanbanView ? (
                 <KanbanHeader className="h-full" />
+              ) : showAgentsView ? (
+                <div className="h-full px-4 flex items-center text-section-header">AGENTS</div>
+              ) : showGraphView ? (
+                <div className="h-full px-4 flex items-center text-section-header">GRAPH</div>
+              ) : showMemoryView ? (
+                <div className="h-full px-4 flex items-center text-section-header">MEMORY</div>
+              ) : showConnectorsView ? (
+                <div className="h-full px-4 flex items-center text-section-header">CONNECTORS</div>
+              ) : showTemplatesView ? (
+                <div className="h-full px-4 flex items-center text-section-header">TEMPLATES</div>
+              ) : showToolsView ? (
+                <div className="h-full px-4 flex items-center text-section-header">
+                  SKILLS/TOOLS
+                </div>
+              ) : showZeroClawView ? (
+                <div className="h-full px-4 flex items-center text-section-header">ZEROCLAW</div>
+              ) : showSettingsView ? (
+                <div className="h-full px-4 flex items-center text-section-header">SETTINGS</div>
               ) : (
                 currentThreadId && <TabBar className="h-full border-b-0" />
               )}
@@ -172,6 +213,38 @@ function App(): React.JSX.Element {
               <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
                 <KanbanView />
               </main>
+            ) : showAgentsView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <AgentsView />
+              </main>
+            ) : showGraphView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <GraphView />
+              </main>
+            ) : showMemoryView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <MemoryView />
+              </main>
+            ) : showConnectorsView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <ConnectorsView />
+              </main>
+            ) : showTemplatesView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <TemplatesView />
+              </main>
+            ) : showToolsView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <ToolsView />
+              </main>
+            ) : showZeroClawView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <ZeroClawView />
+              </main>
+            ) : showSettingsView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <SettingsView />
+              </main>
             ) : (
               <>
                 {/* Center - Content Panel (Agent Chat + File Viewer) */}
@@ -189,16 +262,24 @@ function App(): React.JSX.Element {
           </div>
         </div>
 
-        {!showKanbanView && (
-          <>
-            <ResizeHandle onDrag={handleRightResize} />
+        {!showKanbanView &&
+          !showAgentsView &&
+          !showGraphView &&
+          !showMemoryView &&
+          !showConnectorsView &&
+          !showTemplatesView &&
+          !showToolsView &&
+          !showZeroClawView &&
+          !showSettingsView && (
+            <>
+              <ResizeHandle onDrag={handleRightResize} />
 
-            {/* Right Panel - Status Panels (full height) */}
-            <div style={{ width: rightWidth }} className="shrink-0">
-              <RightPanel />
-            </div>
-          </>
-        )}
+              {/* Right Panel - Status Panels (full height) */}
+              <div style={{ width: rightWidth }} className="shrink-0">
+                <RightPanel />
+              </div>
+            </>
+          )}
       </div>
     </ThreadProvider>
   )

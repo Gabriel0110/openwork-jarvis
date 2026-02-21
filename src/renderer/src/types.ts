@@ -23,6 +23,518 @@ export interface Run {
   metadata?: Record<string, unknown>
 }
 
+export interface AgentDefinition {
+  id: string
+  workspaceId: string
+  name: string
+  role: string
+  systemPrompt: string
+  modelProvider: ProviderId
+  modelName: string
+  toolAllowlist: string[]
+  connectorAllowlist: string[]
+  memoryScope: "private" | "shared"
+  skillMode: AgentSkillMode
+  skillsAllowlist: string[]
+  tags: string[]
+  isOrchestrator: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export type AgentSkillMode = "global_only" | "global_plus_selected" | "selected_only"
+export type SkillSource = "global_agents" | "global_codex"
+
+export interface SkillDefinition {
+  id: string
+  name: string
+  description: string
+  path: string
+  source: SkillSource
+  license?: string
+  compatibility?: string
+  metadata?: Record<string, string>
+  allowedTools: string[]
+}
+
+export interface SkillRegistryLocation {
+  source: SkillSource
+  path: string
+  exists: boolean
+}
+
+export interface SkillListResult {
+  skills: SkillDefinition[]
+  locations: SkillRegistryLocation[]
+  loadedAt: string
+}
+
+export interface SkillDetail {
+  skill: SkillDefinition
+  content: string
+}
+
+export type PolicyResourceType = "tool" | "connector" | "network" | "filesystem"
+export type PolicyAction = "read" | "write" | "exec" | "post"
+export type PolicyScope = "global" | "workspace" | "session"
+export type PolicyDecision = "allow" | "ask" | "deny" | "allow_in_session"
+
+export interface PolicyRule {
+  id: string
+  agentId: string
+  resourceType: PolicyResourceType
+  resourceKey: string
+  action: PolicyAction
+  scope: PolicyScope
+  decision: PolicyDecision
+  constraints: Record<string, unknown>
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface SecurityDefaults {
+  requireExecApproval: boolean
+  requireNetworkApproval: boolean
+  denySocialPosting: boolean
+}
+
+export interface SettingsStorageLocations {
+  openworkDir: string
+  dbPath: string
+  checkpointDbPath: string
+  threadCheckpointDir: string
+  envFilePath: string
+  zeroClawDir: string
+  zeroClawRuntimeDir: string
+  zeroClawDeploymentsDir: string
+  zeroClawLogsDir: string
+}
+
+export type TimelineEventType =
+  | "user_message"
+  | "tool_call"
+  | "tool_result"
+  | "approval_required"
+  | "subagent_started"
+  | "subagent_completed"
+  | "template_trigger_match"
+  | "error"
+
+export interface TimelineEvent {
+  id: string
+  threadId: string
+  workspaceId: string
+  eventType: TimelineEventType
+  sourceAgentId?: string
+  targetAgentId?: string
+  toolName?: string
+  summary?: string
+  payload: Record<string, unknown>
+  occurredAt: Date
+  createdAt: Date
+}
+
+export interface GraphLayoutEntry {
+  workspaceId: string
+  agentId: string
+  x: number
+  y: number
+  updatedAt: Date
+}
+
+export type MemoryEntryScope = "session" | "agent" | "workspace"
+export type RagSourceStatus = "idle" | "indexing" | "ready" | "error"
+
+export interface MemoryEntry {
+  id: string
+  workspaceId: string
+  scope: MemoryEntryScope
+  agentId?: string
+  threadId?: string
+  title?: string
+  content: string
+  tags: string[]
+  source: string
+  locked: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface RagSource {
+  id: string
+  workspaceId: string
+  path: string
+  enabled: boolean
+  includeGlobs: string[]
+  excludeGlobs: string[]
+  status: RagSourceStatus
+  lastIndexedAt?: Date
+  lastError?: string
+  chunkCount: number
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface MemorySearchResult {
+  source: "memory" | "rag"
+  id: string
+  score: number
+  title?: string
+  contentSnippet: string
+  path?: string
+  scope?: MemoryEntryScope
+  agentId?: string
+  threadId?: string
+  createdAt: Date
+}
+
+export type ConnectorCategory = "messaging" | "dev" | "social" | "email" | "webhook" | "custom"
+export type ConnectorStatus = "disconnected" | "connected" | "error"
+export type McpServerStatus = "stopped" | "running" | "error"
+
+export interface ConnectorDefinition {
+  id: string
+  workspaceId: string
+  key: string
+  name: string
+  category: ConnectorCategory
+  config: Record<string, unknown>
+  enabled: boolean
+  status: ConnectorStatus
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface McpServerDefinition {
+  id: string
+  workspaceId: string
+  name: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  enabled: boolean
+  status: McpServerStatus
+  lastError?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ConnectorBundleItem {
+  key: string
+  name: string
+  category: ConnectorCategory
+  config: Record<string, unknown>
+  enabled: boolean
+  status: ConnectorStatus
+}
+
+export interface McpServerBundleItem {
+  name: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  enabled: boolean
+  status: McpServerStatus
+  lastError?: string
+}
+
+export interface ConnectorExportBundle {
+  version: "1"
+  exportedAt: string
+  workspaceId: string
+  redacted: boolean
+  connectors: ConnectorBundleItem[]
+  mcpServers: McpServerBundleItem[]
+}
+
+export interface ConnectorImportResult {
+  connectors: ConnectorDefinition[]
+  mcpServers: McpServerDefinition[]
+}
+
+export type ZeroClawInstallState = "not_installed" | "installing" | "installed" | "error"
+export type ZeroClawDeploymentStatus =
+  | "created"
+  | "starting"
+  | "running"
+  | "stopping"
+  | "stopped"
+  | "error"
+export type ZeroClawDesiredState = "running" | "stopped"
+export type ZeroClawEventSeverity = "debug" | "info" | "warning" | "error"
+export type ZeroClawCapabilityMode =
+  | "global_only"
+  | "global_plus_assigned"
+  | "assigned_only"
+  | "deny_all_except_assigned"
+
+export interface ZeroClawVersionRecord {
+  version: string
+  source: "managed" | "external"
+  installPath: string
+  binaryPath: string
+  checksumSha256?: string
+  installedAt: Date
+  isActive: boolean
+}
+
+export interface ZeroClawInstallStatus {
+  state: ZeroClawInstallState
+  activeVersion?: string
+  availableVersions: string[]
+  installations: ZeroClawVersionRecord[]
+  lastError?: string
+  runtimeRoot: string
+}
+
+export interface ZeroClawCapabilityPolicy {
+  mode: ZeroClawCapabilityMode
+  includeGlobalSkills: boolean
+  assignedSkillIds: string[]
+  assignedToolNames: string[]
+  assignedConnectorKeys: string[]
+  deniedToolNames: string[]
+  deniedConnectorKeys: string[]
+}
+
+export interface ZeroClawEffectiveCapabilitySet {
+  mode: ZeroClawCapabilityMode
+  skills: SkillDefinition[]
+  tools: ToolDefinition[]
+  connectors: ConnectorDefinition[]
+  gates: {
+    read: boolean
+    write: boolean
+    exec: boolean
+    network: boolean
+    channel: boolean
+  }
+}
+
+export interface ZeroClawDeploymentSpec {
+  workspaceId?: string
+  name: string
+  description?: string
+  runtimeVersion?: string
+  workspacePath: string
+  modelProvider: ProviderId
+  modelName: string
+  env?: Record<string, string>
+  gatewayHost?: string
+  gatewayPort?: number
+  apiBaseUrl?: string
+  policy?: Partial<ZeroClawCapabilityPolicy>
+  autoStart?: boolean
+}
+
+export interface ZeroClawDeploymentState {
+  id: string
+  workspaceId: string
+  name: string
+  description?: string
+  runtimeVersion: string
+  workspacePath: string
+  modelProvider: ProviderId
+  modelName: string
+  status: ZeroClawDeploymentStatus
+  desiredState: ZeroClawDesiredState
+  processId?: number
+  gatewayHost: string
+  gatewayPort: number
+  apiBaseUrl: string
+  lastError?: string
+  policy: ZeroClawCapabilityPolicy
+  effectiveCapabilities: ZeroClawEffectiveCapabilitySet
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ZeroClawRuntimeHealth {
+  deploymentId: string
+  status: "unknown" | "healthy" | "degraded" | "unhealthy"
+  checkedAt: Date
+  latencyMs?: number
+  detail?: Record<string, unknown>
+  error?: string
+}
+
+export interface ZeroClawRuntimeEvent {
+  id: string
+  deploymentId: string
+  eventType: string
+  severity: ZeroClawEventSeverity
+  message: string
+  payload: Record<string, unknown>
+  correlationId?: string
+  occurredAt: Date
+  createdAt: Date
+}
+
+export interface ZeroClawDoctorCheck {
+  id: string
+  label: string
+  ok: boolean
+  details?: string
+  repairHint?: string
+}
+
+export interface ZeroClawDoctorReport {
+  deploymentId?: string
+  generatedAt: Date
+  healthy: boolean
+  checks: ZeroClawDoctorCheck[]
+}
+
+export interface ZeroClawActionResult {
+  ok: boolean
+  message: string
+}
+
+export type ToolCategory =
+  | "filesystem"
+  | "execution"
+  | "network"
+  | "connector"
+  | "memory"
+  | "skills"
+  | "custom"
+
+export type ToolRiskTier = 0 | 1 | 2 | 3
+export type ToolSource = "system" | "custom"
+export type ToolImplementationType = "builtin" | "script"
+
+export interface ToolDefinition {
+  id: string
+  workspaceId: string
+  name: string
+  displayName: string
+  description: string
+  category: ToolCategory
+  action: PolicyAction
+  riskTier: ToolRiskTier
+  source: ToolSource
+  implementationType: ToolImplementationType
+  config: Record<string, unknown>
+  enabled: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface WorkflowTemplatePolicyDefault {
+  agentId?: string
+  resourceType: PolicyResourceType
+  resourceKey: string
+  action: PolicyAction
+  scope: PolicyScope
+  decision: PolicyDecision
+  constraints?: Record<string, unknown>
+}
+
+export interface WorkflowTemplateMemorySeed {
+  scope: MemoryEntryScope
+  agentId?: string
+  title?: string
+  content: string
+  tags?: string[]
+}
+
+export interface WorkflowTemplateMemoryDefaults {
+  seedEntries?: WorkflowTemplateMemorySeed[]
+}
+
+export interface WorkflowTemplateSchedule {
+  enabled: boolean
+  rrule?: string
+  timezone?: string
+}
+
+export type WorkflowTemplateTriggerType = "timeline_event" | "connector_event" | "webhook"
+export type WorkflowTemplateTriggerExecutionMode = "notify" | "auto_run"
+
+export interface WorkflowTemplateTrigger {
+  id: string
+  type: WorkflowTemplateTriggerType
+  enabled: boolean
+  executionMode: WorkflowTemplateTriggerExecutionMode
+  eventKey: string
+  sourceKey?: string
+  matchText?: string
+}
+
+export interface WorkflowTemplate {
+  id: string
+  workspaceId: string
+  name: string
+  description?: string
+  starterPrompts: string[]
+  agentIds: string[]
+  requiredConnectorKeys: string[]
+  expectedArtifacts: string[]
+  defaultSpeakerType: "orchestrator" | "agent"
+  defaultSpeakerAgentId?: string
+  defaultModelId?: string
+  policyDefaults: WorkflowTemplatePolicyDefault[]
+  memoryDefaults: WorkflowTemplateMemoryDefaults
+  schedule?: WorkflowTemplateSchedule
+  triggers: WorkflowTemplateTrigger[]
+  tags: string[]
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface WorkflowTemplateExportBundle {
+  version: "1"
+  exportedAt: string
+  workspaceId: string
+  templates: WorkflowTemplate[]
+}
+
+export interface WorkflowTemplateRunResult {
+  status: "started" | "blocked"
+  templateId: string
+  templateName: string
+  thread?: Thread
+  missingConnectors?: string[]
+  appliedPolicies: number
+  seededMemoryEntries: number
+}
+
+export interface WorkflowTemplateAutomationDraft {
+  name: string
+  prompt: string
+  rrule: string
+  timezone: string
+  status: "ACTIVE" | "PAUSED"
+  template: {
+    id: string
+    name: string
+    workspaceId: string
+  }
+}
+
+export interface WorkflowTemplateAutomationDirective {
+  draft: WorkflowTemplateAutomationDraft
+  directive: string
+  cwd: string
+  usedFallbackCwd: boolean
+}
+
+export type WorkflowTemplateScheduleRunStatus = "pending" | "started" | "blocked" | "error"
+
+export interface WorkflowTemplateScheduleRun {
+  id: string
+  templateId: string
+  workspaceId: string
+  scheduledFor: Date
+  status: WorkflowTemplateScheduleRunStatus
+  runThreadId?: string
+  missingConnectors: string[]
+  errorMessage?: string
+  metadata: Record<string, unknown>
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Provider configuration
 export type ProviderId = "anthropic" | "openai" | "google" | "ollama"
 

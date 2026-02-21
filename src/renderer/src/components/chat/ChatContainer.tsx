@@ -8,6 +8,7 @@ import { MessageBubble } from "./MessageBubble"
 import { ModelSwitcher } from "./ModelSwitcher"
 import { Folder } from "lucide-react"
 import { WorkspacePicker } from "./WorkspacePicker"
+import { SpeakerPicker } from "./SpeakerPicker"
 import { selectWorkspaceFolder } from "@/lib/workspace-utils"
 import { ChatTodos } from "./ChatTodos"
 import { ContextUsageIndicator } from "./ContextUsageIndicator"
@@ -46,6 +47,8 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     workspacePath,
     tokenUsage,
     currentModel,
+    speakerType,
+    speakerAgentId,
     draftInput: input,
     setTodos,
     setWorkspaceFiles,
@@ -64,21 +67,63 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
 
   const handleApprovalDecision = useCallback(
     async (decision: "approve" | "reject" | "edit"): Promise<void> => {
-      if (!pendingApproval || !stream) return
-
-      setPendingApproval(null)
+      if (!pendingApproval) return
+      if (!stream) {
+        setError("Approval action is unavailable because the run stream is not connected.")
+        return
+      }
 
       try {
+        const toolName = pendingApproval.tool_call.name
+        const toolCallId = pendingApproval.tool_call.id
+        const toolArgs = pendingApproval.tool_call.args
         await stream.submit(null, {
-          command: { resume: { decision } },
-          config: { configurable: { thread_id: threadId, model_id: currentModel } }
+          command: {
+            resume: {
+              decision,
+              toolName,
+              toolCallId,
+              toolArgs
+            }
+          },
+          config: {
+            configurable: {
+              thread_id: threadId,
+              model_id: currentModel,
+              speaker_type: speakerType,
+              speaker_agent_id: speakerAgentId || undefined
+            }
+          }
         })
+        setPendingApproval(null)
       } catch (err) {
         console.error("[ChatContainer] Resume command failed:", err)
+        setError("Failed to submit approval decision. Please try again.")
       }
     },
-    [pendingApproval, setPendingApproval, stream, threadId, currentModel]
+    [
+      pendingApproval,
+      setPendingApproval,
+      stream,
+      threadId,
+      currentModel,
+      speakerType,
+      speakerAgentId,
+      setError
+    ]
   )
+
+  const pendingApprovalArgsPreview = useMemo(() => {
+    if (!pendingApproval?.tool_call?.args) {
+      return "{}"
+    }
+    try {
+      const raw = JSON.stringify(pendingApproval.tool_call.args, null, 2)
+      return raw.length > 1200 ? `${raw.slice(0, 1200)}...` : raw
+    } catch {
+      return "{}"
+    }
+  }, [pendingApproval])
 
   const agentValues = stream?.values as AgentStreamValues | undefined
   const streamTodos = agentValues?.todos
@@ -262,7 +307,12 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       },
       {
         config: {
-          configurable: { thread_id: threadId, model_id: currentModel }
+          configurable: {
+            thread_id: threadId,
+            model_id: currentModel,
+            speaker_type: speakerType,
+            speaker_agent_id: speakerAgentId || undefined
+          }
         }
       }
     )
@@ -349,6 +399,41 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
               </div>
             )}
 
+            {/* Explicit pending approval actions */}
+            {pendingApproval && (
+              <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-amber-300">
+                  Pending Approval
+                </div>
+                <div className="mt-1 text-sm text-foreground">
+                  Tool: <span className="font-mono">{pendingApproval.tool_call.name}</span>
+                </div>
+                <div className="mt-2 text-[11px] text-muted-foreground">Arguments</div>
+                <pre className="mt-1 max-h-40 overflow-auto rounded-sm border border-amber-500/20 bg-background/70 p-2 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all">
+                  {pendingApprovalArgsPreview}
+                </pre>
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => void handleApprovalDecision("reject")}
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => void handleApprovalDecision("approve")}
+                  >
+                    Approve & Run
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Error state */}
             {threadError && !isLoading && (
               <div className="flex items-start gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-4">
@@ -411,6 +496,8 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                <SpeakerPicker threadId={threadId} />
+                <div className="w-px h-4 bg-border" />
                 <ModelSwitcher threadId={threadId} />
                 <div className="w-px h-4 bg-border" />
                 <WorkspacePicker threadId={threadId} />

@@ -9,6 +9,7 @@ import {
 } from "../db"
 import { getCheckpointer, closeCheckpointer } from "../agent/runtime"
 import { deleteThreadCheckpoint } from "../storage"
+import { clearPolicyThreadSession } from "../services/policy-session"
 import { generateTitle } from "../services/title-generator"
 import type { Thread, ThreadUpdateParams } from "../types"
 
@@ -87,6 +88,9 @@ export function registerThreadHandlers(ipcMain: IpcMain): void {
   // Delete a thread
   ipcMain.handle("threads:delete", async (_event, threadId: string) => {
     console.log("[Threads] Deleting thread:", threadId)
+
+    clearPolicyThreadSession(threadId)
+    console.log("[Threads] Cleared policy session state")
 
     // Delete from our metadata store
     dbDeleteThread(threadId)

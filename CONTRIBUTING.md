@@ -1,169 +1,66 @@
-# Contributing to openwork
+# Contributing to openwork-jarvis
 
-Thank you for your interest in contributing to openwork! This document provides guidelines for development and contribution.
+Thanks for contributing.
 
-## Development Setup
+## Prerequisites
 
-### Prerequisites
-
-- Node.js 20+
+- Node.js `>=20.19.0` (see `/Users/gtomberlin/Documents/Code/openwork-jarvis/.nvmrc`)
 - npm 10+
 - Git
 
-### Getting Started
+## Setup
 
-1. Fork and clone the repository:
-
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/openwork.git
-   cd openwork
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
+```bash
+npm ci
+npm run dev
+```
 
 ## Project Structure
 
-```
-openwork/
-├── src/
-│   ├── main/               # Electron main process
-│   │   ├── index.ts        # App entry point
-│   │   ├── agent/          # DeepAgents runtime
-│   │   ├── checkpointer/   # LangGraph checkpointing
-│   │   ├── db/             # SQLite database
-│   │   ├── ipc/            # IPC handlers
-│   │   └── services/       # Business logic services
-│   ├── preload/            # Electron preload/context bridge
-│   │   └── index.ts
-│   └── renderer/           # React frontend
-│       └── src/
-│           ├── App.tsx
-│           ├── index.css   # Tailwind + design system
-│           ├── components/
-│           │   ├── ui/     # Base shadcn components
-│           │   ├── chat/   # Chat interface
-│           │   ├── sidebar/# Thread sidebar
-│           │   ├── panels/ # Right panel tabs
-│           │   ├── hitl/   # Human-in-the-loop dialogs
-│           │   ├── settings/
-│           │   └── tabs/
-│           └── lib/        # Utilities and store
-├── bin/                    # CLI launcher
-├── public/                 # Static assets
-└── resources/              # Electron resources
+```text
+src/main/       Electron main process, runtime, IPC, DB/storage
+src/preload/    Context bridge and typed API surface
+src/renderer/   React UI and client state/transport
+docs/           Architecture and product docs
+tests/          Unit and smoke tests
 ```
 
-## Code Style
+## Quality Gates
 
-### TypeScript
-
-- Use strict TypeScript with no `any` types
-- Prefer interfaces over types for object shapes
-- Export types alongside implementations
-
-### React
-
-- Use functional components with hooks
-- Prefer named exports
-- Keep components focused and composable
-
-### CSS
-
-- Use Tailwind CSS with the tactical design system
-- Follow the color system defined in `src/index.css`
-- Use `cn()` utility for conditional classes
-
-## Design System
-
-openwork uses a tactical/SCADA-inspired design system:
-
-### Colors
-
-| Role       | Variable                | Hex       |
-| ---------- | ----------------------- | --------- |
-| Background | `--background`          | `#0D0D0F` |
-| Elevated   | `--background-elevated` | `#141418` |
-| Border     | `--border`              | `#2A2A32` |
-| Critical   | `--status-critical`     | `#E53E3E` |
-| Warning    | `--status-warning`      | `#F59E0B` |
-| Nominal    | `--status-nominal`      | `#22C55E` |
-| Info       | `--status-info`         | `#3B82F6` |
-
-### Typography
-
-- Primary font: JetBrains Mono
-- Section headers: 11px, uppercase, tracked
-- Data values: Tabular nums for alignment
-
-### Spacing
-
-- Use the Tailwind spacing scale
-- Prefer 4px increments (p-1, p-2, p-3, p-4)
-- Consistent 3px border radius
-
-## Testing
+Run these before opening a PR:
 
 ```bash
-# Run linting
 npm run lint
-
-# Run type checking
 npm run typecheck
-
-# Build for all platforms
+npm run test
 npm run build
 ```
 
-## Pull Request Process
+Smoke tests for packaged app behavior:
 
-1. Create a feature branch from `main`
-2. Make your changes with clear commit messages
-3. Ensure all checks pass (`npm run lint && npm run typecheck`)
-4. Submit a PR with a description of changes
-5. Address any review feedback
+```bash
+npm run test:smoke:build
+```
 
-## Commit Messages
+## Testing
 
-Use conventional commits:
+- Unit tests: Vitest (`/Users/gtomberlin/Documents/Code/openwork-jarvis/tests/unit`)
+- Smoke tests: Playwright Electron launch checks (`/Users/gtomberlin/Documents/Code/openwork-jarvis/tests/smoke`)
 
-- `feat:` New features
-- `fix:` Bug fixes
-- `docs:` Documentation changes
-- `style:` Code style changes (formatting)
-- `refactor:` Code refactoring
-- `test:` Test additions/changes
-- `chore:` Build/tooling changes
+## Coding Rules
 
-## Issue Labels
+1. Keep IPC payloads strictly typed.
+2. Keep privileged operations in main/preload, not renderer.
+3. Add DB changes via migrations only.
+4. Keep diffs focused; avoid unrelated refactors.
 
-We use labels to organize issues:
+## Commit Conventions
 
-| Label              | Description                   |
-| ------------------ | ----------------------------- |
-| `bug`              | Something isn't working       |
-| `enhancement`      | New feature or improvement    |
-| `good first issue` | Good for newcomers            |
-| `help wanted`      | Extra attention needed        |
-| `documentation`    | Documentation improvements    |
-| `question`         | Further information requested |
-| `wontfix`          | This will not be worked on    |
+Use conventional commit prefixes:
 
-## Questions?
-
-Open an issue or start a discussion on GitHub.
-changes
-
-- `chore:` Build/tooling changes
-
-## Questions?
-
-Open an issue or start a discussion on GitHub.
+- `feat:`
+- `fix:`
+- `docs:`
+- `refactor:`
+- `test:`
+- `chore:`

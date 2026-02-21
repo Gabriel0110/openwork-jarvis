@@ -1,5 +1,21 @@
 import { useState } from "react"
-import { Plus, MessageSquare, Trash2, Pencil, Loader2, LayoutGrid, AlertCircle } from "lucide-react"
+import {
+  Plus,
+  MessageSquare,
+  Trash2,
+  Pencil,
+  Loader2,
+  LayoutGrid,
+  AlertCircle,
+  Users,
+  Network,
+  Database,
+  Plug,
+  FileStack,
+  Wrench,
+  Bot,
+  Settings2
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAppStore } from "@/lib/store"
@@ -14,6 +30,36 @@ import {
 } from "@/components/ui/context-menu"
 import type { Thread } from "@/types"
 
+type ThreadFilterMode = "all" | "active" | "blocked" | "zeroclaw"
+
+function getThreadTags(thread: Thread): string[] {
+  const metadata = thread.metadata
+  if (!metadata || typeof metadata !== "object") {
+    return []
+  }
+
+  const rawTags = (metadata as Record<string, unknown>).tags
+  if (!Array.isArray(rawTags)) {
+    return []
+  }
+
+  return rawTags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+}
+
+function getThreadSpeakerType(thread: Thread): string | null {
+  const metadata = thread.metadata
+  if (!metadata || typeof metadata !== "object") {
+    return null
+  }
+
+  const speakerType = (metadata as Record<string, unknown>).speakerType
+  return typeof speakerType === "string" ? speakerType : null
+}
+
+function isZeroClawThread(thread: Thread): boolean {
+  return getThreadSpeakerType(thread) === "zeroclaw"
+}
+
 // Thread status indicator that shows loading, interrupted, or default state
 function ThreadStatusIcon({ threadId }: { threadId: string }): React.JSX.Element {
   const { isLoading } = useThreadStream(threadId)
@@ -22,11 +68,11 @@ function ThreadStatusIcon({ threadId }: { threadId: string }): React.JSX.Element
   if (isLoading) {
     return <Loader2 className="size-4 shrink-0 text-status-info animate-spin" />
   }
-  
+
   if (pendingApproval) {
     return <AlertCircle className="size-4 shrink-0 text-status-warning" />
   }
-  
+
   return <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
 }
 
@@ -54,6 +100,9 @@ function ThreadListItem({
   onCancelEditing: () => void
   onEditingTitleChange: (value: string) => void
 }): React.JSX.Element {
+  const tags = getThreadTags(thread)
+  const zeroClawThread = isZeroClawThread(thread)
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -91,8 +140,27 @@ function ThreadListItem({
                 <div className="text-sm truncate block">
                   {thread.title || truncate(thread.thread_id, 20)}
                 </div>
-                <div className="text-[10px] text-muted-foreground truncate">
-                  {formatRelativeTime(thread.updated_at)}
+                <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
+                  <span className="truncate">{formatRelativeTime(thread.updated_at)}</span>
+                  {thread.status !== "idle" && (
+                    <span className="rounded-sm border border-border/60 bg-background/60 px-1 py-0.5 uppercase tracking-wide">
+                      {thread.status}
+                    </span>
+                  )}
+                  {zeroClawThread && (
+                    <span className="inline-flex items-center gap-1 rounded-sm border border-border/60 bg-background/60 px-1 py-0.5">
+                      <Bot className="size-2.5" />
+                      ZeroClaw
+                    </span>
+                  )}
+                  {tags.slice(0, 2).map((tag) => (
+                    <span
+                      key={`${thread.thread_id}:${tag}`}
+                      className="rounded-sm border border-border/60 bg-background/60 px-1 py-0.5"
+                    >
+                      {tag}
+                    </span>
+                  ))}
                 </div>
               </>
             )}
@@ -133,11 +201,49 @@ export function ThreadSidebar(): React.JSX.Element {
     selectThread,
     deleteThread,
     updateThread,
-    setShowKanbanView
+    setShowKanbanView,
+    setShowAgentsView,
+    setShowGraphView,
+    setShowMemoryView,
+    setShowConnectorsView,
+    setShowToolsView,
+    setShowZeroClawView,
+    setShowSettingsView,
+    setShowTemplatesView
   } = useAppStore()
 
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filterMode, setFilterMode] = useState<ThreadFilterMode>("all")
+
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const visibleThreads = threads.filter((thread) => {
+    if (filterMode === "active" && thread.status !== "busy") {
+      return false
+    }
+    if (filterMode === "blocked" && thread.status !== "interrupted" && thread.status !== "error") {
+      return false
+    }
+    if (filterMode === "zeroclaw" && !isZeroClawThread(thread)) {
+      return false
+    }
+
+    if (!normalizedQuery) {
+      return true
+    }
+
+    const title = (thread.title || "").toLowerCase()
+    const id = thread.thread_id.toLowerCase()
+    const tags = getThreadTags(thread).join(" ").toLowerCase()
+    const speakerType = (getThreadSpeakerType(thread) || "").toLowerCase()
+    return (
+      title.includes(normalizedQuery) ||
+      id.includes(normalizedQuery) ||
+      tags.includes(normalizedQuery) ||
+      speakerType.includes(normalizedQuery)
+    )
+  })
 
   const startEditing = (threadId: string, currentTitle: string): void => {
     setEditingThreadId(threadId)
@@ -174,12 +280,52 @@ export function ThreadSidebar(): React.JSX.Element {
           <Plus className="size-4" />
           New Thread
         </Button>
+        <input
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          className="mt-2 h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
+          placeholder="Search sessions..."
+        />
+        <div className="mt-2 flex gap-1">
+          <Button
+            variant={filterMode === "all" ? "default" : "outline"}
+            size="sm"
+            className="h-6 px-2 text-[10px]"
+            onClick={() => setFilterMode("all")}
+          >
+            All
+          </Button>
+          <Button
+            variant={filterMode === "active" ? "default" : "outline"}
+            size="sm"
+            className="h-6 px-2 text-[10px]"
+            onClick={() => setFilterMode("active")}
+          >
+            Active
+          </Button>
+          <Button
+            variant={filterMode === "blocked" ? "default" : "outline"}
+            size="sm"
+            className="h-6 px-2 text-[10px]"
+            onClick={() => setFilterMode("blocked")}
+          >
+            Blocked
+          </Button>
+          <Button
+            variant={filterMode === "zeroclaw" ? "default" : "outline"}
+            size="sm"
+            className="h-6 px-2 text-[10px]"
+            onClick={() => setFilterMode("zeroclaw")}
+          >
+            ZeroClaw
+          </Button>
+        </div>
       </div>
 
       {/* Thread List */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-2 space-y-1 overflow-hidden">
-          {threads.map((thread) => (
+          {visibleThreads.map((thread) => (
             <ThreadListItem
               key={thread.thread_id}
               thread={thread}
@@ -195,9 +341,9 @@ export function ThreadSidebar(): React.JSX.Element {
             />
           ))}
 
-          {threads.length === 0 && (
+          {visibleThreads.length === 0 && (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-              No threads yet
+              {threads.length === 0 ? "No threads yet" : "No sessions match this filter"}
             </div>
           )}
         </div>
@@ -212,7 +358,79 @@ export function ThreadSidebar(): React.JSX.Element {
           onClick={() => setShowKanbanView(true)}
         >
           <LayoutGrid className="size-4" />
-          Overview
+          Home
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 mt-1"
+          onClick={() => setShowAgentsView(true)}
+        >
+          <Users className="size-4" />
+          Agents
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 mt-1"
+          onClick={() => setShowGraphView(true)}
+        >
+          <Network className="size-4" />
+          Graph
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 mt-1"
+          onClick={() => setShowMemoryView(true)}
+        >
+          <Database className="size-4" />
+          Memory
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 mt-1"
+          onClick={() => setShowConnectorsView(true)}
+        >
+          <Plug className="size-4" />
+          Connectors
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 mt-1"
+          onClick={() => setShowTemplatesView(true)}
+        >
+          <FileStack className="size-4" />
+          Templates
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 mt-1"
+          onClick={() => setShowToolsView(true)}
+        >
+          <Wrench className="size-4" />
+          Skills/Tools
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 mt-1"
+          onClick={() => setShowZeroClawView(true)}
+        >
+          <Bot className="size-4" />
+          ZeroClaw
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 mt-1"
+          onClick={() => setShowSettingsView(true)}
+        >
+          <Settings2 className="size-4" />
+          Settings
         </Button>
       </div>
     </aside>

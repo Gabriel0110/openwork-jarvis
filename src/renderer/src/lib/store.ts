@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Thread, ModelConfig, Provider } from "@/types"
+import type { AgentDefinition, ModelConfig, Provider, Thread } from "@/types"
 
 interface AppState {
   // Threads
@@ -9,6 +9,7 @@ interface AppState {
   // Models and Providers (global, not per-thread)
   models: ModelConfig[]
   providers: Provider[]
+  agents: AgentDefinition[]
 
   // Right panel state (UI state, not thread data)
   rightPanelTab: "todos" | "files" | "subagents"
@@ -22,6 +23,16 @@ interface AppState {
   // Kanban view state
   showKanbanView: boolean
   showSubagentsInKanban: boolean
+  showAgentsView: boolean
+  showGraphView: boolean
+  showMemoryView: boolean
+  showConnectorsView: boolean
+  showToolsView: boolean
+  showZeroClawView: boolean
+  zeroClawDeploymentFocusId: string | null
+  showSettingsView: boolean
+  showTemplatesView: boolean
+  selectedTemplateId: string | null
 
   // Thread actions
   loadThreads: () => Promise<void>
@@ -30,6 +41,29 @@ interface AppState {
   deleteThread: (threadId: string) => Promise<void>
   updateThread: (threadId: string, updates: Partial<Thread>) => Promise<void>
   generateTitleForFirstMessage: (threadId: string, content: string) => Promise<void>
+
+  // Agent registry actions
+  loadAgents: () => Promise<void>
+  createAgent: (agent: {
+    workspaceId?: string
+    name: string
+    role: string
+    systemPrompt: string
+    modelProvider: "anthropic" | "openai" | "google" | "ollama"
+    modelName: string
+    toolAllowlist?: string[]
+    connectorAllowlist?: string[]
+    memoryScope?: "private" | "shared"
+    skillMode?: "global_only" | "global_plus_selected" | "selected_only"
+    skillsAllowlist?: string[]
+    tags?: string[]
+    isOrchestrator?: boolean
+  }) => Promise<AgentDefinition>
+  updateAgent: (
+    agentId: string,
+    updates: Partial<Omit<AgentDefinition, "id" | "workspaceId" | "createdAt" | "updatedAt">>
+  ) => Promise<void>
+  deleteAgent: (agentId: string) => Promise<void>
 
   // Model actions
   loadModels: () => Promise<void>
@@ -50,6 +84,16 @@ interface AppState {
   // Kanban actions
   setShowKanbanView: (show: boolean) => void
   setShowSubagentsInKanban: (show: boolean) => void
+  setShowAgentsView: (show: boolean) => void
+  setShowGraphView: (show: boolean) => void
+  setShowMemoryView: (show: boolean) => void
+  setShowConnectorsView: (show: boolean) => void
+  setShowToolsView: (show: boolean) => void
+  setShowZeroClawView: (show: boolean, deploymentId?: string | null) => void
+  setZeroClawDeploymentFocusId: (deploymentId: string | null) => void
+  setShowSettingsView: (show: boolean) => void
+  setShowTemplatesView: (show: boolean, templateId?: string | null) => void
+  setSelectedTemplateId: (templateId: string | null) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -58,11 +102,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentThreadId: null,
   models: [],
   providers: [],
+  agents: [],
   rightPanelTab: "todos",
   settingsOpen: false,
   sidebarCollapsed: false,
   showKanbanView: false,
   showSubagentsInKanban: true,
+  showAgentsView: false,
+  showGraphView: false,
+  showMemoryView: false,
+  showConnectorsView: false,
+  showToolsView: false,
+  showZeroClawView: false,
+  zeroClawDeploymentFocusId: null,
+  showSettingsView: false,
+  showTemplatesView: false,
+  selectedTemplateId: null,
 
   // Thread actions
   loadThreads: async () => {
@@ -80,7 +135,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       threads: [thread, ...state.threads],
       currentThreadId: thread.thread_id,
-      showKanbanView: false
+      showKanbanView: false,
+      showAgentsView: false,
+      showGraphView: false,
+      showMemoryView: false,
+      showConnectorsView: false,
+      showToolsView: false,
+      showZeroClawView: false,
+      showSettingsView: false,
+      showTemplatesView: false,
+      selectedTemplateId: null
     }))
     return thread
   },
@@ -88,7 +152,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectThread: async (threadId: string) => {
     // Just update currentThreadId - ThreadContext handles per-thread state
     // Also close kanban view when selecting a thread
-    set({ currentThreadId: threadId, showKanbanView: false })
+    set({
+      currentThreadId: threadId,
+      showKanbanView: false,
+      showAgentsView: false,
+      showGraphView: false,
+      showMemoryView: false,
+      showConnectorsView: false,
+      showToolsView: false,
+      showZeroClawView: false,
+      showSettingsView: false,
+      showTemplatesView: false,
+      selectedTemplateId: null
+    })
   },
 
   deleteThread: async (threadId: string) => {
@@ -128,6 +204,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error("[Store] Failed to generate title:", error)
     }
+  },
+
+  loadAgents: async () => {
+    const agents = await window.api.agents.list()
+    set({ agents })
+  },
+
+  createAgent: async (agent) => {
+    const created = await window.api.agents.create(agent)
+    set((state) => ({ agents: [created, ...state.agents] }))
+    return created
+  },
+
+  updateAgent: async (agentId, updates) => {
+    const updated = await window.api.agents.update(agentId, updates)
+    set((state) => ({
+      agents: state.agents.map((agent) => (agent.id === agentId ? updated : agent))
+    }))
+  },
+
+  deleteAgent: async (agentId) => {
+    await window.api.agents.delete(agentId)
+    set((state) => ({ agents: state.agents.filter((agent) => agent.id !== agentId) }))
   },
 
   // Model actions
@@ -185,7 +284,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Kanban actions
   setShowKanbanView: (show: boolean) => {
     if (show) {
-      set({ showKanbanView: true, currentThreadId: null })
+      set({
+        showKanbanView: true,
+        showAgentsView: false,
+        showGraphView: false,
+        showMemoryView: false,
+        showConnectorsView: false,
+        showToolsView: false,
+        showZeroClawView: false,
+        showSettingsView: false,
+        showTemplatesView: false,
+        selectedTemplateId: null,
+        currentThreadId: null
+      })
     } else {
       set({ showKanbanView: false })
     }
@@ -193,5 +304,174 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setShowSubagentsInKanban: (show: boolean) => {
     set({ showSubagentsInKanban: show })
+  },
+
+  setShowAgentsView: (show: boolean) => {
+    if (show) {
+      set({
+        showAgentsView: true,
+        showKanbanView: false,
+        showGraphView: false,
+        showMemoryView: false,
+        showConnectorsView: false,
+        showToolsView: false,
+        showZeroClawView: false,
+        showSettingsView: false,
+        showTemplatesView: false,
+        selectedTemplateId: null,
+        currentThreadId: null
+      })
+    } else {
+      set({ showAgentsView: false })
+    }
+  },
+
+  setShowGraphView: (show: boolean) => {
+    if (show) {
+      set({
+        showGraphView: true,
+        showKanbanView: false,
+        showAgentsView: false,
+        showMemoryView: false,
+        showConnectorsView: false,
+        showToolsView: false,
+        showZeroClawView: false,
+        showSettingsView: false,
+        showTemplatesView: false,
+        selectedTemplateId: null
+      })
+    } else {
+      set({ showGraphView: false })
+    }
+  },
+
+  setShowMemoryView: (show: boolean) => {
+    if (show) {
+      set({
+        showMemoryView: true,
+        showKanbanView: false,
+        showAgentsView: false,
+        showGraphView: false,
+        showConnectorsView: false,
+        showToolsView: false,
+        showZeroClawView: false,
+        showSettingsView: false,
+        showTemplatesView: false,
+        selectedTemplateId: null
+      })
+    } else {
+      set({ showMemoryView: false })
+    }
+  },
+
+  setShowConnectorsView: (show: boolean) => {
+    if (show) {
+      set({
+        showConnectorsView: true,
+        showKanbanView: false,
+        showAgentsView: false,
+        showGraphView: false,
+        showMemoryView: false,
+        showToolsView: false,
+        showZeroClawView: false,
+        showSettingsView: false,
+        showTemplatesView: false,
+        selectedTemplateId: null
+      })
+    } else {
+      set({ showConnectorsView: false })
+    }
+  },
+
+  setShowTemplatesView: (show: boolean, templateId?: string | null) => {
+    if (show) {
+      set({
+        showTemplatesView: true,
+        showKanbanView: false,
+        showAgentsView: false,
+        showGraphView: false,
+        showMemoryView: false,
+        showConnectorsView: false,
+        showToolsView: false,
+        showZeroClawView: false,
+        showSettingsView: false,
+        selectedTemplateId:
+          typeof templateId === "string" && templateId.trim().length > 0 ? templateId : null
+      })
+    } else {
+      set({ showTemplatesView: false, selectedTemplateId: null })
+    }
+  },
+
+  setShowToolsView: (show: boolean) => {
+    if (show) {
+      set({
+        showToolsView: true,
+        showKanbanView: false,
+        showAgentsView: false,
+        showGraphView: false,
+        showMemoryView: false,
+        showConnectorsView: false,
+        showTemplatesView: false,
+        showZeroClawView: false,
+        showSettingsView: false,
+        selectedTemplateId: null
+      })
+    } else {
+      set({ showToolsView: false })
+    }
+  },
+
+  setShowZeroClawView: (show: boolean, deploymentId?: string | null) => {
+    if (show) {
+      set({
+        showZeroClawView: true,
+        showKanbanView: false,
+        showAgentsView: false,
+        showGraphView: false,
+        showMemoryView: false,
+        showConnectorsView: false,
+        showTemplatesView: false,
+        showToolsView: false,
+        showSettingsView: false,
+        selectedTemplateId: null,
+        zeroClawDeploymentFocusId:
+          typeof deploymentId === "string" && deploymentId.trim().length > 0 ? deploymentId : null
+      })
+    } else {
+      set({ showZeroClawView: false, zeroClawDeploymentFocusId: null })
+    }
+  },
+
+  setZeroClawDeploymentFocusId: (deploymentId: string | null) => {
+    set({
+      zeroClawDeploymentFocusId:
+        typeof deploymentId === "string" && deploymentId.trim().length > 0 ? deploymentId : null
+    })
+  },
+
+  setShowSettingsView: (show: boolean) => {
+    if (show) {
+      set({
+        showSettingsView: true,
+        showKanbanView: false,
+        showAgentsView: false,
+        showGraphView: false,
+        showMemoryView: false,
+        showConnectorsView: false,
+        showToolsView: false,
+        showZeroClawView: false,
+        showTemplatesView: false,
+        selectedTemplateId: null
+      })
+    } else {
+      set({ showSettingsView: false })
+    }
+  },
+
+  setSelectedTemplateId: (templateId: string | null) => {
+    set({
+      selectedTemplateId: templateId && templateId.trim().length > 0 ? templateId : null
+    })
   }
 }))

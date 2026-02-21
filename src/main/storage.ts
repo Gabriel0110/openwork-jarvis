@@ -1,10 +1,17 @@
 import { homedir } from "os"
 import { join } from "path"
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs"
-import type { ProviderId } from "./types"
+import type { ProviderId, SecurityDefaults, SettingsStorageLocations } from "./types"
 
 const OPENWORK_DIR = join(homedir(), ".openwork")
 const ENV_FILE = join(OPENWORK_DIR, ".env")
+const SECURITY_DEFAULTS_FILE = join(OPENWORK_DIR, "security-defaults.json")
+
+export const DEFAULT_SECURITY_DEFAULTS: SecurityDefaults = {
+  requireExecApproval: true,
+  requireNetworkApproval: true,
+  denySocialPosting: true
+}
 
 // Environment variable names for each provider
 const ENV_VAR_NAMES: Record<ProviderId, string> = {
@@ -41,6 +48,38 @@ export function getThreadCheckpointPath(threadId: string): string {
   return join(getThreadCheckpointDir(), `${threadId}.sqlite`)
 }
 
+export function getZeroClawDir(): string {
+  const dir = join(getOpenworkDir(), "zeroclaw")
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+export function getZeroClawRuntimeDir(): string {
+  const dir = join(getZeroClawDir(), "runtime")
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+export function getZeroClawDeploymentsDir(): string {
+  const dir = join(getZeroClawDir(), "deployments")
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+export function getZeroClawLogsDir(): string {
+  const dir = join(getZeroClawDir(), "logs")
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
 export function deleteThreadCheckpoint(threadId: string): void {
   const path = getThreadCheckpointPath(threadId)
   if (existsSync(path)) {
@@ -50,6 +89,74 @@ export function deleteThreadCheckpoint(threadId: string): void {
 
 export function getEnvFilePath(): string {
   return ENV_FILE
+}
+
+function parseSecurityDefaultsInput(value: unknown): Partial<SecurityDefaults> {
+  if (!value || typeof value !== "object") {
+    return {}
+  }
+
+  const candidate = value as Record<string, unknown>
+  return {
+    requireExecApproval:
+      typeof candidate.requireExecApproval === "boolean"
+        ? candidate.requireExecApproval
+        : undefined,
+    requireNetworkApproval:
+      typeof candidate.requireNetworkApproval === "boolean"
+        ? candidate.requireNetworkApproval
+        : undefined,
+    denySocialPosting:
+      typeof candidate.denySocialPosting === "boolean" ? candidate.denySocialPosting : undefined
+  }
+}
+
+function mergeSecurityDefaults(overrides?: Partial<SecurityDefaults>): SecurityDefaults {
+  return {
+    requireExecApproval:
+      overrides?.requireExecApproval ?? DEFAULT_SECURITY_DEFAULTS.requireExecApproval,
+    requireNetworkApproval:
+      overrides?.requireNetworkApproval ?? DEFAULT_SECURITY_DEFAULTS.requireNetworkApproval,
+    denySocialPosting: overrides?.denySocialPosting ?? DEFAULT_SECURITY_DEFAULTS.denySocialPosting
+  }
+}
+
+export function getSecurityDefaults(): SecurityDefaults {
+  if (!existsSync(SECURITY_DEFAULTS_FILE)) {
+    return DEFAULT_SECURITY_DEFAULTS
+  }
+
+  try {
+    const raw = readFileSync(SECURITY_DEFAULTS_FILE, "utf-8")
+    const parsed = JSON.parse(raw)
+    return mergeSecurityDefaults(parseSecurityDefaultsInput(parsed))
+  } catch {
+    return DEFAULT_SECURITY_DEFAULTS
+  }
+}
+
+export function setSecurityDefaults(updates: Partial<SecurityDefaults>): SecurityDefaults {
+  const next = mergeSecurityDefaults({
+    ...getSecurityDefaults(),
+    ...updates
+  })
+  getOpenworkDir()
+  writeFileSync(SECURITY_DEFAULTS_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf-8")
+  return next
+}
+
+export function getStorageLocations(): SettingsStorageLocations {
+  return {
+    openworkDir: getOpenworkDir(),
+    dbPath: getDbPath(),
+    checkpointDbPath: getCheckpointDbPath(),
+    threadCheckpointDir: getThreadCheckpointDir(),
+    envFilePath: getEnvFilePath(),
+    zeroClawDir: getZeroClawDir(),
+    zeroClawRuntimeDir: getZeroClawRuntimeDir(),
+    zeroClawDeploymentsDir: getZeroClawDeploymentsDir(),
+    zeroClawLogsDir: getZeroClawLogsDir()
+  }
 }
 
 // Read .env file and parse into object

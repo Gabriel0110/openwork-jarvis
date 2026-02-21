@@ -1,0 +1,90 @@
+{
+  "version": "1",
+  "exportedAt": "2026-02-21T00:00:00.000Z",
+  "workspaceId": "default",
+  "templates": [
+    {
+      "id": "starter-coding-assist",
+      "workspaceId": "default",
+      "name": "Coding Assist",
+      "description": "Run implementation + review specialists and return a validated change summary.",
+      "starterPrompts": [
+        "Implement the requested feature with focused diffs.",
+        "Run lint/typecheck/tests and summarize any regressions."
+      ],
+      "agentIds": ["seed-orchestrator", "seed-coder", "seed-reviewer"],
+      "requiredConnectorKeys": [],
+      "expectedArtifacts": ["Code diff", "Validation summary"],
+      "defaultSpeakerType": "orchestrator",
+      "policyDefaults": [
+        {
+          "agentId": "seed-coder",
+          "resourceType": "tool",
+          "resourceKey": "execute",
+          "action": "exec",
+          "scope": "session",
+          "decision": "ask",
+          "constraints": {}
+        }
+      ],
+      "memoryDefaults": {
+        "seedEntries": [
+          {
+            "scope": "workspace",
+            "title": "Coding Assist Guardrails",
+            "content": "Prioritize correctness, minimal diff scope, and explicit verification results.",
+            "tags": ["coding", "quality"]
+          }
+        ]
+      },
+      "schedule": {
+        "enabled": false
+      },
+      "triggers": [
+        {
+          "id": "starter-coding-webhook",
+          "type": "webhook",
+          "enabled": true,
+          "executionMode": "notify",
+          "eventKey": "coding.requested"
+        }
+      ],
+      "tags": ["dev", "quality"],
+      "createdAt": "2026-02-21T00:00:00.000Z",
+      "updatedAt": "2026-02-21T00:00:00.000Z"
+    },
+    {
+      "id": "starter-release-check",
+      "workspaceId": "default",
+      "name": "Release Readiness Check",
+      "description": "Run a release health pass and emit blocker/non-blocker findings.",
+      "starterPrompts": [
+        "Evaluate release readiness for the current branch and report blockers first."
+      ],
+      "agentIds": ["seed-orchestrator", "seed-operator"],
+      "requiredConnectorKeys": ["github"],
+      "expectedArtifacts": ["Release checklist", "Risk register"],
+      "defaultSpeakerType": "orchestrator",
+      "policyDefaults": [],
+      "memoryDefaults": {},
+      "schedule": {
+        "enabled": true,
+        "rrule": "FREQ=WEEKLY;BYDAY=FR;BYHOUR=9;BYMINUTE=0",
+        "timezone": "America/Los_Angeles"
+      },
+      "triggers": [
+        {
+          "id": "starter-release-connector",
+          "type": "connector_event",
+          "enabled": true,
+          "executionMode": "notify",
+          "eventKey": "release.requested",
+          "sourceKey": "github"
+        }
+      ],
+      "tags": ["ops", "release"],
+      "createdAt": "2026-02-21T00:00:00.000Z",
+      "updatedAt": "2026-02-21T00:00:00.000Z"
+    }
+  ]
+}

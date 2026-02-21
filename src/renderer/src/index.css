@@ -110,6 +110,94 @@
   --sidebar-ring: #3b82f6;
 }
 
+:root[data-theme="default"] {
+  /* Uses base :root values */
+}
+
+:root[data-theme="human"] {
+  --background: #0f1320;
+  --background-elevated: #172032;
+  --background-interactive: #1f2a40;
+  --foreground: #e6edf8;
+  --border: #33445f;
+  --border-emphasis: #4b6284;
+  --input: #33445f;
+  --ring: #89b4ff;
+  --primary: #6ea8ff;
+  --primary-foreground: #0f1320;
+  --accent: #f7cb63;
+  --accent-foreground: #1b1f2d;
+  --status-critical: #ee6b6e;
+  --status-warning: #f4bf58;
+  --status-nominal: #79c37f;
+  --status-info: #6ea8ff;
+  --sidebar: #111a2b;
+  --sidebar-accent: #202d45;
+}
+
+:root[data-theme="orc"] {
+  --background: #15110d;
+  --background-elevated: #241b14;
+  --background-interactive: #35251a;
+  --foreground: #f0e5d8;
+  --border: #5a3f28;
+  --border-emphasis: #7a5435;
+  --input: #5a3f28;
+  --ring: #d88b4a;
+  --primary: #c96a34;
+  --primary-foreground: #fff4ea;
+  --accent: #9eae4b;
+  --accent-foreground: #14110d;
+  --status-critical: #e7674a;
+  --status-warning: #d88b4a;
+  --status-nominal: #8abf63;
+  --status-info: #6bb6b1;
+  --sidebar: #1e1510;
+  --sidebar-accent: #3b281c;
+}
+
+:root[data-theme="undead"] {
+  --background: #111018;
+  --background-elevated: #191725;
+  --background-interactive: #262138;
+  --foreground: #e4e2ef;
+  --border: #4f4668;
+  --border-emphasis: #675f85;
+  --input: #4f4668;
+  --ring: #a39bff;
+  --primary: #8b7ff1;
+  --primary-foreground: #f2efff;
+  --accent: #6ec9be;
+  --accent-foreground: #0e1118;
+  --status-critical: #dd6a8e;
+  --status-warning: #d8b06a;
+  --status-nominal: #74bda7;
+  --status-info: #8fa4ff;
+  --sidebar: #141222;
+  --sidebar-accent: #2a2440;
+}
+
+:root[data-theme="night-elf"] {
+  --background: #0c1814;
+  --background-elevated: #12261f;
+  --background-interactive: #1b362c;
+  --foreground: #e5f1e9;
+  --border: #2f5a4e;
+  --border-emphasis: #3f7464;
+  --input: #2f5a4e;
+  --ring: #6ac7b0;
+  --primary: #4ea88f;
+  --primary-foreground: #e7fff7;
+  --accent: #8dbd6a;
+  --accent-foreground: #111b16;
+  --status-critical: #d46f7d;
+  --status-warning: #c2b46b;
+  --status-nominal: #6fc197;
+  --status-info: #63b8c7;
+  --sidebar: #102019;
+  --sidebar-accent: #1f3d31;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

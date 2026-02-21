@@ -1,0 +1,92 @@
+{
+  "version": "1",
+  "exportedAt": "2026-02-21T00:00:00.000Z",
+  "workspaceId": "default",
+  "items": [
+    {
+      "agent": {
+        "id": "seed-orchestrator",
+        "workspaceId": "default",
+        "name": "Orchestrator",
+        "role": "CEO orchestrator that plans, delegates, and merges outputs",
+        "systemPrompt": "You are the orchestrator. Build clear plans, delegate work to specialists, track risks, and synthesize final outputs.",
+        "modelProvider": "anthropic",
+        "modelName": "claude-sonnet-4-5-20250929",
+        "toolAllowlist": ["task", "read_file", "glob", "grep"],
+        "connectorAllowlist": [],
+        "memoryScope": "shared",
+        "skillMode": "global_only",
+        "skillsAllowlist": [],
+        "tags": ["orchestrator", "planning", "delegation"],
+        "isOrchestrator": true,
+        "createdAt": "2026-02-21T00:00:00.000Z",
+        "updatedAt": "2026-02-21T00:00:00.000Z"
+      },
+      "policies": []
+    },
+    {
+      "agent": {
+        "id": "seed-coder",
+        "workspaceId": "default",
+        "name": "Coder",
+        "role": "Implements code changes safely and efficiently",
+        "systemPrompt": "You are a senior software engineer. Ship robust code changes, explain tradeoffs briefly, and keep diffs focused.",
+        "modelProvider": "anthropic",
+        "modelName": "claude-sonnet-4-5-20250929",
+        "toolAllowlist": ["read_file", "write_file", "edit_file", "glob", "grep", "execute"],
+        "connectorAllowlist": ["github"],
+        "memoryScope": "private",
+        "skillMode": "global_plus_selected",
+        "skillsAllowlist": ["frontend-design", "react-doctor"],
+        "tags": ["dev", "coding"],
+        "isOrchestrator": false,
+        "createdAt": "2026-02-21T00:00:00.000Z",
+        "updatedAt": "2026-02-21T00:00:00.000Z"
+      },
+      "policies": [
+        {
+          "id": "seed-policy-coder-exec",
+          "agentId": "seed-coder",
+          "resourceType": "tool",
+          "resourceKey": "execute",
+          "action": "exec",
+          "scope": "workspace",
+          "decision": "ask",
+          "constraints": {}
+        }
+      ]
+    },
+    {
+      "agent": {
+        "id": "seed-operator",
+        "workspaceId": "default",
+        "name": "Operator",
+        "role": "Automates local workflows and operations tasks",
+        "systemPrompt": "You are an operations specialist. Maintain reliable local workflows, scripts, and task automation with safe defaults.",
+        "modelProvider": "anthropic",
+        "modelName": "claude-sonnet-4-5-20250929",
+        "toolAllowlist": ["read_file", "write_file", "edit_file", "glob", "grep", "execute"],
+        "connectorAllowlist": ["email", "slack", "discord"],
+        "memoryScope": "shared",
+        "skillMode": "global_only",
+        "skillsAllowlist": [],
+        "tags": ["ops", "automation"],
+        "isOrchestrator": false,
+        "createdAt": "2026-02-21T00:00:00.000Z",
+        "updatedAt": "2026-02-21T00:00:00.000Z"
+      },
+      "policies": [
+        {
+          "id": "seed-policy-operator-post",
+          "agentId": "seed-operator",
+          "resourceType": "connector",
+          "resourceKey": "x",
+          "action": "post",
+          "scope": "global",
+          "decision": "deny",
+          "constraints": {}
+        }
+      ]
+    }
+  ]
+}

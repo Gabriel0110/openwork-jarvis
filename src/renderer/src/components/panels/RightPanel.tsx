@@ -3,6 +3,7 @@ import {
   ListTodo,
   FolderTree,
   GitBranch,
+  History,
   ChevronRight,
   ChevronDown,
   CheckCircle2,
@@ -21,14 +22,18 @@ import {
   FileCode,
   FileJson,
   Image,
-  FileType
+  FileType,
+  MessageSquare,
+  ShieldAlert,
+  UserRound,
+  Wrench
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppStore } from "@/lib/store"
-import { useThreadState } from "@/lib/thread-context"
+import { useThreadState, useThreadStream } from "@/lib/thread-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { Todo } from "@/types"
+import type { Message, TimelineEvent, Todo } from "@/types"
 
 const HEADER_HEIGHT = 40 // px
 const HANDLE_HEIGHT = 6 // px
@@ -118,9 +123,12 @@ function ResizeHandle({ onDrag }: ResizeHandleProps): React.JSX.Element {
 export function RightPanel(): React.JSX.Element {
   const { currentThreadId } = useAppStore()
   const threadState = useThreadState(currentThreadId)
+  const streamData = useThreadStream(currentThreadId || "__no_thread__")
   const todos = threadState?.todos ?? []
+  const messages = threadState?.messages ?? []
   const workspaceFiles = threadState?.workspaceFiles ?? []
   const subagents = threadState?.subagents ?? []
+  const pendingApproval = threadState?.pendingApproval ?? null
   const containerRef = useRef<HTMLDivElement>(null)
 
   const [tasksOpen, setTasksOpen] = useState(true)
@@ -308,6 +316,11 @@ export function RightPanel(): React.JSX.Element {
     setHeights(getContentHeights())
   }, [getContentHeights])
 
+  const timelineBadge = useMemo(() => {
+    const streamMessageCount = Array.isArray(streamData.messages) ? streamData.messages.length : 0
+    return messages.length + streamMessageCount + subagents.length + (pendingApproval ? 1 : 0)
+  }, [messages.length, pendingApproval, streamData.messages, subagents.length])
+
   return (
     <aside
       ref={containerRef}
@@ -354,15 +367,15 @@ export function RightPanel(): React.JSX.Element {
       {/* AGENTS */}
       <div className="flex flex-col shrink-0">
         <SectionHeader
-          title="AGENTS"
-          icon={GitBranch}
-          badge={subagents.length}
+          title="TIMELINE"
+          icon={History}
+          badge={timelineBadge}
           isOpen={agentsOpen}
           onToggle={() => setAgentsOpen((prev) => !prev)}
         />
         {agentsOpen && (
           <div className="overflow-auto" style={{ height: heights.agents }}>
-            <AgentsContent />
+            <TimelineContent />
           </div>
         )}
       </div>
@@ -508,15 +521,102 @@ function TaskItem({ todo }: { todo: Todo }): React.JSX.Element {
   )
 }
 
+interface ArtifactEntry {
+  id: string
+  path: string
+  actionLabel: string
+}
+
+function getFileArtifactPath(args: Record<string, unknown>): string | null {
+  const candidates = [args.file_path, args.path]
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate
+    }
+  }
+  return null
+}
+
+function extractArtifactsFromMessages(messages: Message[]): ArtifactEntry[] {
+  const artifactLabels: Record<string, string> = {
+    write_file: "Wrote",
+    edit_file: "Edited",
+    read_file: "Read"
+  }
+
+  const seen = new Set<string>()
+  const artifacts: ArtifactEntry[] = []
+
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "assistant" || !message.tool_calls || message.tool_calls.length === 0) {
+      continue
+    }
+
+    for (const toolCall of message.tool_calls) {
+      const actionLabel = artifactLabels[toolCall.name]
+      if (!actionLabel) {
+        continue
+      }
+      const path = getFileArtifactPath((toolCall.args || {}) as Record<string, unknown>)
+      if (!path) {
+        continue
+      }
+
+      const artifactKey = `${toolCall.name}:${path}`
+      if (seen.has(artifactKey)) {
+        continue
+      }
+      seen.add(artifactKey)
+
+      artifacts.push({
+        id: `${toolCall.id}:${path}`,
+        path,
+        actionLabel
+      })
+    }
+  }
+
+  return artifacts.slice(0, 12)
+}
+
+function getFileName(path: string): string {
+  const parts = path.split("/").filter(Boolean)
+  return parts[parts.length - 1] || path
+}
+
 function FilesContent(): React.JSX.Element {
   const { currentThreadId } = useAppStore()
   const threadState = useThreadState(currentThreadId)
+  const messages = useMemo(() => threadState?.messages ?? [], [threadState?.messages])
   const workspaceFiles = threadState?.workspaceFiles ?? []
   const workspacePath = threadState?.workspacePath ?? null
   const setWorkspacePath = threadState?.setWorkspacePath
   const setWorkspaceFiles = threadState?.setWorkspaceFiles
+  const openFile = threadState?.openFile
   const [syncing, setSyncing] = useState(false)
-  const [syncSuccess] = useState(false)
+  const [syncSuccess, setSyncSuccess] = useState(false)
+  const syncSuccessTimerRef = useRef<number | null>(null)
+  const artifacts = useMemo(() => extractArtifactsFromMessages(messages), [messages])
+
+  const flashSyncSuccess = useCallback((): void => {
+    if (syncSuccessTimerRef.current) {
+      window.clearTimeout(syncSuccessTimerRef.current)
+      syncSuccessTimerRef.current = null
+    }
+    setSyncSuccess(true)
+    syncSuccessTimerRef.current = window.setTimeout(() => {
+      setSyncSuccess(false)
+      syncSuccessTimerRef.current = null
+    }, 1500)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (syncSuccessTimerRef.current) {
+        window.clearTimeout(syncSuccessTimerRef.current)
+      }
+    }
+  }, [])
 
   // Load workspace path and files for current thread
   useEffect(() => {
@@ -561,6 +661,7 @@ function FilesContent(): React.JSX.Element {
   async function handleSelectFolder(): Promise<void> {
     if (!currentThreadId || !setWorkspacePath || !setWorkspaceFiles) return
     setSyncing(true)
+    setSyncSuccess(false)
     try {
       const path = await window.api.workspace.select(currentThreadId)
       if (path) {
@@ -569,6 +670,7 @@ function FilesContent(): React.JSX.Element {
         const result = await window.api.workspace.loadFromDisk(currentThreadId)
         if (result.success && result.files) {
           setWorkspaceFiles(result.files)
+          flashSyncSuccess()
         }
       }
     } catch (e) {
@@ -579,18 +681,30 @@ function FilesContent(): React.JSX.Element {
   }
 
   // Handle sync to disk
-  // TODO: Implement syncToDisk API in main process
   async function handleSyncToDisk(): Promise<void> {
-    if (!currentThreadId) return
+    if (!currentThreadId || !setWorkspaceFiles) return
+    setSyncing(true)
+    setSyncSuccess(false)
 
-    // If no files, just select a folder
-    if (workspaceFiles.length === 0) {
-      await handleSelectFolder()
-      return
+    try {
+      if (!workspacePath) {
+        await handleSelectFolder()
+        return
+      }
+
+      const result = await window.api.workspace.loadFromDisk(currentThreadId)
+      if (result.success && result.files) {
+        setWorkspaceFiles(result.files)
+        flashSyncSuccess()
+        return
+      }
+
+      console.warn("[FilesContent] Sync failed:", result.error || "Unknown error")
+    } catch (error) {
+      console.error("[FilesContent] Sync error:", error)
+    } finally {
+      setSyncing(false)
     }
-
-    // syncToDisk is not yet implemented
-    console.warn("[FilesContent] syncToDisk is not yet implemented")
   }
 
   return (
@@ -633,6 +747,28 @@ function FilesContent(): React.JSX.Element {
           </span>
         </Button>
       </div>
+
+      {artifacts.length > 0 && (
+        <div className="border-b border-border/50 px-3 py-2 bg-background/20">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+            Recent Artifacts
+          </div>
+          <div className="space-y-1">
+            {artifacts.map((artifact) => (
+              <button
+                key={artifact.id}
+                onClick={() => openFile?.(artifact.path, getFileName(artifact.path))}
+                className="w-full rounded-sm border border-border/70 px-2 py-1 text-left hover:bg-background-interactive"
+              >
+                <div className="truncate text-xs font-medium">{getFileName(artifact.path)}</div>
+                <div className="truncate text-[10px] text-muted-foreground">
+                  {artifact.actionLabel}: {artifact.path}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* File tree or empty state */}
       {workspaceFiles.length === 0 ? (
@@ -868,8 +1004,7 @@ const FileTreeNode = memo(
     // 4. The onToggle callback changed
     return (
       prevProps.node === nextProps.node &&
-      prevProps.expanded.has(prevProps.node.path) ===
-        nextProps.expanded.has(nextProps.node.path) &&
+      prevProps.expanded.has(prevProps.node.path) === nextProps.expanded.has(nextProps.node.path) &&
       prevProps.openFile === nextProps.openFile &&
       prevProps.onToggle === nextProps.onToggle &&
       prevProps.depth === nextProps.depth
@@ -933,45 +1068,638 @@ function FileIcon({
   }
 }
 
-function AgentsContent(): React.JSX.Element {
-  const { currentThreadId } = useAppStore()
-  const threadState = useThreadState(currentThreadId)
-  const subagents = threadState?.subagents ?? []
+type TimelineEntryKind =
+  | "user"
+  | "assistant"
+  | "tool_call"
+  | "tool_result"
+  | "subagent_started"
+  | "subagent_completed"
+  | "subagent_failed"
+  | "error"
+  | "approval"
 
-  if (subagents.length === 0) {
+interface TimelineEntry {
+  id: string
+  kind: TimelineEntryKind
+  label: string
+  detail?: string
+  meta?: string[]
+  timestamp: number
+  eventType: TimelineEvent["eventType"] | "approval_virtual"
+  toolName?: string
+  templateId?: string
+  runThreadId?: string
+  zeroClawDeploymentId?: string
+}
+
+type TimelineFilterMode = "all" | "trigger_matches"
+
+function truncateSummary(value: string, maxLength: number = 140): string {
+  if (value.length <= maxLength) {
+    return value
+  }
+  return `${value.slice(0, maxLength - 3)}...`
+}
+
+function summarizeToolCallArgs(name: string, args: Record<string, unknown> | undefined): string {
+  const safeArgs = args || {}
+  if (name === "write_file" || name === "edit_file" || name === "read_file") {
+    const filePath = safeArgs.file_path
+    if (typeof filePath === "string" && filePath.trim().length > 0) {
+      return filePath
+    }
+  }
+
+  if (name === "execute") {
+    const command = safeArgs.command
+    if (typeof command === "string" && command.trim().length > 0) {
+      return command
+    }
+  }
+
+  if (name === "task") {
+    const subagentType = safeArgs.subagent_type
+    const description = safeArgs.description
+    const left = typeof subagentType === "string" ? subagentType : "subagent"
+    const right = typeof description === "string" ? truncateSummary(description, 120) : ""
+    return right ? `${left}: ${right}` : left
+  }
+
+  try {
+    return truncateSummary(JSON.stringify(safeArgs), 120)
+  } catch {
+    return ""
+  }
+}
+
+function readPayloadString(
+  payload: Record<string, unknown> | undefined,
+  key: string
+): string | undefined {
+  if (!payload) {
+    return undefined
+  }
+  const value = payload[key]
+  if (typeof value !== "string") {
+    return undefined
+  }
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : undefined
+}
+
+function extractTemplatePayload(event: TimelineEvent): {
+  templateId?: string
+  runThreadId?: string
+} {
+  const templateId = readPayloadString(event.payload, "templateId")
+  const runThreadId = readPayloadString(event.payload, "threadId")
+  return {
+    templateId,
+    runThreadId
+  }
+}
+
+function extractZeroClawPayload(event: TimelineEvent): {
+  deploymentId?: string
+} {
+  const deploymentId = readPayloadString(event.payload, "deploymentId")
+  return {
+    deploymentId
+  }
+}
+
+function extractApprovalDecisionPayload(event: TimelineEvent): {
+  decision?: "approve" | "reject" | "edit"
+  toolName?: string
+  toolCallId?: string
+} {
+  const rawDecision = readPayloadString(event.payload, "approvalDecision")
+  const decision =
+    rawDecision === "approve" || rawDecision === "reject" || rawDecision === "edit"
+      ? rawDecision
+      : undefined
+  const toolName = readPayloadString(event.payload, "toolName")
+  const toolCallId = readPayloadString(event.payload, "toolCallId")
+  return {
+    decision,
+    toolName,
+    toolCallId
+  }
+}
+
+function buildTriggerMatchMeta(event: TimelineEvent): string[] {
+  const triggerType = readPayloadString(event.payload, "triggerType")
+  const triggerEventKey = readPayloadString(event.payload, "triggerEventKey")
+  const triggerSourceKey = readPayloadString(event.payload, "triggerSourceKey")
+  const triggerMode = readPayloadString(event.payload, "triggerExecutionMode")
+  const status = readPayloadString(event.payload, "status")
+  const sourceEventType = readPayloadString(event.payload, "sourceEventType")
+  const sourceToolName = readPayloadString(event.payload, "sourceToolName")
+
+  return [
+    triggerType ? `type:${triggerType}` : undefined,
+    triggerEventKey ? `event:${triggerEventKey}` : undefined,
+    triggerSourceKey ? `source:${triggerSourceKey}` : undefined,
+    triggerMode ? `mode:${triggerMode}` : undefined,
+    sourceEventType ? `from:${sourceEventType}` : undefined,
+    sourceToolName ? `tool:${sourceToolName}` : undefined,
+    status ? `status:${status}` : undefined
+  ].filter((value): value is string => !!value)
+}
+
+function normalizeTimestamp(value: Date | string | number | undefined, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+  if (value instanceof Date) {
+    return value.getTime()
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return fallback
+}
+
+function formatTimelineTime(timestamp: number): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return "--:--"
+  }
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  })
+}
+
+function getTimelineEntryVisual(kind: TimelineEntryKind): {
+  icon: React.ElementType
+  colorClass: string
+} {
+  switch (kind) {
+    case "user":
+      return { icon: UserRound, colorClass: "text-muted-foreground" }
+    case "assistant":
+      return { icon: MessageSquare, colorClass: "text-status-info" }
+    case "tool_call":
+      return { icon: Wrench, colorClass: "text-status-warning" }
+    case "tool_result":
+      return { icon: CheckCircle2, colorClass: "text-status-nominal" }
+    case "subagent_started":
+      return { icon: GitBranch, colorClass: "text-status-info" }
+    case "subagent_completed":
+      return { icon: CheckCircle2, colorClass: "text-status-nominal" }
+    case "subagent_failed":
+      return { icon: XCircle, colorClass: "text-status-critical" }
+    case "error":
+      return { icon: XCircle, colorClass: "text-status-critical" }
+    case "approval":
+      return { icon: ShieldAlert, colorClass: "text-status-warning" }
+    default:
+      return { icon: Circle, colorClass: "text-muted-foreground" }
+  }
+}
+
+function toTimelineEntry(event: TimelineEvent): TimelineEntry {
+  const timestamp = normalizeTimestamp(event.occurredAt, Date.now())
+  const summary = event.summary ? truncateSummary(event.summary) : undefined
+  const toolName = event.toolName || "tool"
+  const templatePayload = extractTemplatePayload(event)
+  const zeroClawPayload = extractZeroClawPayload(event)
+  const approvalPayload = extractApprovalDecisionPayload(event)
+
+  switch (event.eventType) {
+    case "user_message":
+      return {
+        id: event.id,
+        kind: "user",
+        label: "User request",
+        detail: summary,
+        timestamp,
+        eventType: event.eventType
+      }
+    case "tool_call":
+      if (toolName === "template:schedule") {
+        return {
+          id: event.id,
+          kind: "assistant",
+          label: "Scheduled run claimed",
+          detail: summary,
+          timestamp,
+          eventType: event.eventType,
+          toolName,
+          templateId: templatePayload.templateId
+        }
+      }
+      if (toolName === "template:run") {
+        return {
+          id: event.id,
+          kind: "assistant",
+          label: "Template run started",
+          detail: summary,
+          timestamp,
+          eventType: event.eventType,
+          toolName,
+          templateId: templatePayload.templateId
+        }
+      }
+      if (toolName === "template:auto_run") {
+        return {
+          id: event.id,
+          kind: "assistant",
+          label: "Template auto-run requested",
+          detail: summary,
+          timestamp,
+          eventType: event.eventType,
+          toolName,
+          templateId: templatePayload.templateId
+        }
+      }
+      return {
+        id: event.id,
+        kind: "tool_call",
+        label: `Tool call: ${toolName}`,
+        detail: summary,
+        timestamp,
+        eventType: event.eventType,
+        toolName
+      }
+    case "tool_result":
+      if (approvalPayload.decision) {
+        const labelAction =
+          approvalPayload.decision === "approve"
+            ? "approved"
+            : approvalPayload.decision === "reject"
+              ? "rejected"
+              : "edited"
+        const resolvedToolName = approvalPayload.toolName || toolName
+        const callSuffix = approvalPayload.toolCallId
+          ? ` (${approvalPayload.toolCallId.slice(0, 8)})`
+          : ""
+        return {
+          id: event.id,
+          kind: "approval",
+          label: `Approval ${labelAction}: ${resolvedToolName}${callSuffix}`,
+          detail: summary,
+          timestamp,
+          eventType: event.eventType,
+          toolName
+        }
+      }
+      if (toolName === "zeroclaw:webhook") {
+        return {
+          id: event.id,
+          kind: "assistant",
+          label: "ZeroClaw invocation",
+          detail: summary,
+          timestamp,
+          eventType: event.eventType,
+          toolName,
+          zeroClawDeploymentId: zeroClawPayload.deploymentId
+        }
+      }
+      if (toolName === "template:schedule") {
+        return {
+          id: event.id,
+          kind: "assistant",
+          label: "Scheduled run update",
+          detail: summary,
+          timestamp,
+          eventType: event.eventType,
+          toolName,
+          templateId: templatePayload.templateId,
+          runThreadId: templatePayload.runThreadId
+        }
+      }
+      if (toolName === "template:run") {
+        return {
+          id: event.id,
+          kind: "assistant",
+          label: "Template run initialized",
+          detail: summary,
+          timestamp,
+          eventType: event.eventType,
+          toolName,
+          templateId: templatePayload.templateId
+        }
+      }
+      if (toolName === "template:auto_run") {
+        return {
+          id: event.id,
+          kind: "assistant",
+          label: "Template auto-run update",
+          detail: summary,
+          timestamp,
+          eventType: event.eventType,
+          toolName,
+          templateId: templatePayload.templateId,
+          runThreadId: templatePayload.runThreadId
+        }
+      }
+      return {
+        id: event.id,
+        kind: "tool_result",
+        label: `Tool result: ${toolName}`,
+        detail: summary,
+        timestamp,
+        eventType: event.eventType,
+        toolName
+      }
+    case "approval_required":
+      return {
+        id: event.id,
+        kind: "approval",
+        label: `Approval required: ${toolName}`,
+        detail: summary,
+        timestamp,
+        eventType: event.eventType,
+        toolName
+      }
+    case "subagent_started":
+      return {
+        id: event.id,
+        kind: "subagent_started",
+        label: "Delegated task",
+        detail: summary,
+        timestamp,
+        eventType: event.eventType,
+        toolName
+      }
+    case "subagent_completed":
+      return {
+        id: event.id,
+        kind: "subagent_completed",
+        label: "Subagent completed",
+        detail: summary,
+        timestamp,
+        eventType: event.eventType,
+        toolName
+      }
+    case "template_trigger_match":
+      return {
+        id: event.id,
+        kind: "assistant",
+        label: "Template trigger matched",
+        detail: summary,
+        meta: buildTriggerMatchMeta(event),
+        timestamp,
+        eventType: event.eventType,
+        toolName,
+        templateId: templatePayload.templateId
+      }
+    case "error":
+      if (toolName === "zeroclaw:webhook") {
+        return {
+          id: event.id,
+          kind: "error",
+          label: "ZeroClaw invocation error",
+          detail: summary,
+          timestamp,
+          eventType: event.eventType,
+          toolName,
+          zeroClawDeploymentId: zeroClawPayload.deploymentId
+        }
+      }
+      return {
+        id: event.id,
+        kind: "error",
+        label: "Runtime error",
+        detail: summary,
+        timestamp,
+        eventType: event.eventType,
+        toolName
+      }
+    default:
+      return {
+        id: event.id,
+        kind: "assistant",
+        label: "Event",
+        detail: summary,
+        timestamp,
+        eventType: event.eventType,
+        toolName
+      }
+  }
+}
+
+function TimelineContent(): React.JSX.Element {
+  const { currentThreadId, loadThreads, selectThread, setShowTemplatesView, setShowZeroClawView } =
+    useAppStore()
+  const threadState = useThreadState(currentThreadId)
+  const pendingApproval = threadState?.pendingApproval ?? null
+  const [events, setEvents] = useState<TimelineEvent[]>([])
+  const [filterMode, setFilterMode] = useState<TimelineFilterMode>("all")
+
+  useEffect(() => {
+    if (!currentThreadId) {
+      return
+    }
+
+    let cancelled = false
+    let timer: ReturnType<typeof setInterval> | null = null
+
+    const load = async () => {
+      try {
+        const next = await window.api.timeline.list(currentThreadId, 400)
+        if (!cancelled) {
+          setEvents(next)
+        }
+      } catch (error) {
+        console.warn("[RightPanel] Failed to load timeline events.", error)
+      }
+    }
+
+    void load()
+    timer = setInterval(load, 1500)
+
+    return () => {
+      cancelled = true
+      if (timer) {
+        clearInterval(timer)
+      }
+    }
+  }, [currentThreadId])
+
+  const timelineEntries = useMemo(() => {
+    const entries = (currentThreadId ? events : []).map(toTimelineEntry)
+
+    if (pendingApproval?.tool_call?.name) {
+      const lastTimestamp = entries.reduce((latest, entry) => Math.max(latest, entry.timestamp), 0)
+      entries.push({
+        id: `pending-approval-${pendingApproval.id}`,
+        kind: "approval",
+        label: `Approval required: ${pendingApproval.tool_call.name}`,
+        detail: summarizeToolCallArgs(
+          pendingApproval.tool_call.name,
+          pendingApproval.tool_call.args
+        ),
+        timestamp: lastTimestamp + 1,
+        eventType: "approval_virtual"
+      })
+    }
+
+    return entries
+      .filter((entry) => Number.isFinite(entry.timestamp))
+      .sort((a, b) => b.timestamp - a.timestamp)
+  }, [currentThreadId, events, pendingApproval])
+
+  const filteredEntries = useMemo(() => {
+    if (filterMode === "all") {
+      return timelineEntries
+    }
+
+    return timelineEntries.filter(
+      (entry) =>
+        entry.eventType === "template_trigger_match" || entry.toolName === "template:auto_run"
+    )
+  }, [filterMode, timelineEntries])
+
+  const openTemplateInLibrary = useCallback(
+    (templateId: string): void => {
+      setShowTemplatesView(true, templateId)
+    },
+    [setShowTemplatesView]
+  )
+
+  const openRunThread = useCallback(
+    async (threadId: string): Promise<void> => {
+      await loadThreads()
+      await selectThread(threadId)
+    },
+    [loadThreads, selectThread]
+  )
+  const openZeroClawDiagnostics = useCallback(
+    (deploymentId: string): void => {
+      setShowZeroClawView(true, deploymentId)
+    },
+    [setShowZeroClawView]
+  )
+
+  if (timelineEntries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center text-center text-sm text-muted-foreground py-8 px-4">
-        <GitBranch className="size-8 mb-2 opacity-50" />
-        <span>No subagent tasks</span>
-        <span className="text-xs mt-1">Subagents appear when spawned</span>
+        <History className="size-8 mb-2 opacity-50" />
+        <span>No timeline events yet</span>
+        <span className="text-xs mt-1">Tool calls, approvals, and delegation will appear here</span>
       </div>
     )
   }
 
   return (
-    <div className="p-3 space-y-2">
-      {subagents.map((agent) => (
-        <div key={agent.id} className="p-3 rounded-sm border border-border">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <GitBranch className="size-3.5 text-status-info" />
-            <span className="flex-1">{agent.name}</span>
-            <span
-              className={cn(
-                "text-[10px] px-1.5 py-0.5 rounded",
-                agent.status === "pending" && "bg-muted text-muted-foreground",
-                agent.status === "running" && "bg-status-info/20 text-status-info",
-                agent.status === "completed" && "bg-status-nominal/20 text-status-nominal",
-                agent.status === "failed" && "bg-status-critical/20 text-status-critical"
-              )}
-            >
-              {agent.status.toUpperCase()}
-            </span>
-          </div>
-          {agent.description && (
-            <p className="text-xs text-muted-foreground mt-1">{agent.description}</p>
-          )}
+    <div className="p-3">
+      <div className="mb-2 flex flex-wrap items-center gap-1">
+        <Button
+          size="sm"
+          variant={filterMode === "all" ? "default" : "outline"}
+          className="h-6 px-2 text-[10px]"
+          onClick={() => setFilterMode("all")}
+        >
+          All
+        </Button>
+        <Button
+          size="sm"
+          variant={filterMode === "trigger_matches" ? "default" : "outline"}
+          className="h-6 px-2 text-[10px]"
+          onClick={() => setFilterMode("trigger_matches")}
+        >
+          Trigger Matches
+        </Button>
+      </div>
+
+      {filteredEntries.length === 0 && (
+        <div className="rounded-sm border border-border px-3 py-4 text-xs text-muted-foreground">
+          No trigger-related events yet for this thread.
         </div>
-      ))}
+      )}
+
+      <div className="space-y-2">
+        {filteredEntries.map((entry) => {
+          const canOpenTemplate = !!entry.templateId
+          const canOpenRunThread = !!entry.runThreadId && entry.runThreadId !== currentThreadId
+          const canOpenZeroClaw = !!entry.zeroClawDeploymentId
+          const visual = getTimelineEntryVisual(entry.kind)
+          const Icon = visual.icon
+          return (
+            <div key={entry.id} className="rounded-sm border border-border p-3">
+              <div className="flex items-start gap-2">
+                <Icon className={cn("size-3.5 shrink-0 mt-0.5", visual.colorClass)} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium">{entry.label}</span>
+                    <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                      {formatTimelineTime(entry.timestamp)}
+                    </span>
+                  </div>
+                  {entry.detail && (
+                    <p className="mt-1 text-xs text-muted-foreground break-words">{entry.detail}</p>
+                  )}
+                  {entry.meta && entry.meta.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {entry.meta.map((value) => (
+                        <span
+                          key={`${entry.id}-${value}`}
+                          className="rounded-sm border border-border/70 bg-background/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                        >
+                          {value}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {(canOpenTemplate || canOpenRunThread || canOpenZeroClaw) && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {canOpenZeroClaw && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => {
+                            if (entry.zeroClawDeploymentId) {
+                              openZeroClawDiagnostics(entry.zeroClawDeploymentId)
+                            }
+                          }}
+                        >
+                          Open ZeroClaw
+                        </Button>
+                      )}
+                      {canOpenTemplate && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => {
+                            if (entry.templateId) {
+                              openTemplateInLibrary(entry.templateId)
+                            }
+                          }}
+                        >
+                          Open template
+                        </Button>
+                      )}
+                      {canOpenRunThread && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => {
+                            if (entry.runThreadId) {
+                              void openRunThread(entry.runThreadId)
+                            }
+                          }}
+                        >
+                          Open run thread
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

@@ -1,9 +1,22 @@
 import { app, shell, BrowserWindow, ipcMain, nativeImage } from "electron"
 import { join } from "path"
 import { registerAgentHandlers } from "./ipc/agent"
+import { registerAgentRegistryHandlers } from "./ipc/agents"
 import { registerThreadHandlers } from "./ipc/threads"
 import { registerModelHandlers } from "./ipc/models"
-import { initializeDatabase } from "./db"
+import { registerPolicyHandlers } from "./ipc/policies"
+import { registerGraphHandlers } from "./ipc/graph"
+import { registerTimelineHandlers } from "./ipc/timeline"
+import { registerMemoryHandlers } from "./ipc/memory"
+import { registerConnectorHandlers } from "./ipc/connectors"
+import { registerTemplateHandlers } from "./ipc/templates"
+import { registerSettingsHandlers } from "./ipc/settings"
+import { registerSkillHandlers } from "./ipc/skills"
+import { registerToolHandlers } from "./ipc/tools"
+import { registerZeroClawHandlers } from "./ipc/zeroclaw"
+import { closeDatabase, initializeDatabase } from "./db"
+import { startTemplateScheduler, stopTemplateScheduler } from "./services/template-scheduler"
+import { getZeroClawManager } from "./zeroclaw/manager"
 
 let mainWindow: BrowserWindow | null = null
 
@@ -80,9 +93,23 @@ app.whenReady().then(async () => {
 
   // Initialize database
   await initializeDatabase()
+  startTemplateScheduler()
+  const zeroClawManager = getZeroClawManager()
+  await zeroClawManager.hydrate()
 
   // Register IPC handlers
   registerAgentHandlers(ipcMain)
+  registerAgentRegistryHandlers(ipcMain)
+  registerPolicyHandlers(ipcMain)
+  registerGraphHandlers(ipcMain)
+  registerTimelineHandlers(ipcMain)
+  registerMemoryHandlers(ipcMain)
+  registerConnectorHandlers(ipcMain)
+  registerTemplateHandlers(ipcMain)
+  registerSettingsHandlers(ipcMain)
+  registerSkillHandlers(ipcMain)
+  registerToolHandlers(ipcMain)
+  registerZeroClawHandlers(ipcMain)
   registerThreadHandlers(ipcMain)
   registerModelHandlers(ipcMain)
 
@@ -99,4 +126,11 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit()
   }
+})
+
+app.on("before-quit", () => {
+  const zeroClawManager = getZeroClawManager()
+  void zeroClawManager.shutdown()
+  stopTemplateScheduler()
+  closeDatabase()
 })

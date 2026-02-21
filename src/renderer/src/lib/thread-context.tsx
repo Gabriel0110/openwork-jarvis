@@ -47,6 +47,8 @@ export interface ThreadState {
   fileContents: Record<string, string>
   tokenUsage: TokenUsage | null
   draftInput: string
+  speakerType: "orchestrator" | "agent" | "zeroclaw"
+  speakerAgentId: string | null
 }
 
 // Stream instance type
@@ -76,6 +78,10 @@ export interface ThreadActions {
   setActiveTab: (tab: "agent" | string) => void
   setFileContents: (path: string, content: string) => void
   setDraftInput: (input: string) => void
+  setSpeaker: (
+    speakerType: "orchestrator" | "agent" | "zeroclaw",
+    speakerAgentId?: string | null
+  ) => void
 }
 
 // Context value
@@ -109,7 +115,9 @@ const createDefaultThreadState = (): ThreadState => ({
   activeTab: "agent",
   fileContents: {},
   tokenUsage: null,
-  draftInput: ""
+  draftInput: "",
+  speakerType: "orchestrator",
+  speakerAgentId: null
 })
 
 const defaultStreamData: StreamData = {
@@ -527,6 +535,29 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
         },
         setDraftInput: (input: string) => {
           updateThreadState(threadId, () => ({ draftInput: input }))
+        },
+        setSpeaker: (
+          speakerType: "orchestrator" | "agent" | "zeroclaw",
+          speakerAgentId?: string | null
+        ) => {
+          const normalizedAgentId = speakerType === "orchestrator" ? null : speakerAgentId || null
+          updateThreadState(threadId, () => ({
+            speakerType,
+            speakerAgentId: normalizedAgentId
+          }))
+
+          window.api.threads.get(threadId).then((thread) => {
+            if (thread) {
+              const metadata = thread.metadata || {}
+              window.api.threads.update(threadId, {
+                metadata: {
+                  ...metadata,
+                  speakerType,
+                  speakerAgentId: normalizedAgentId
+                }
+              })
+            }
+          })
         }
       }
 
@@ -539,6 +570,9 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
   const loadThreadHistory = useCallback(
     async (threadId: string) => {
       const actions = getThreadActions(threadId)
+      let templateStarterPrompt = ""
+      let hasCheckpointMessages = false
+      let persistedThreadValueMessages: Message[] = []
 
       // Load workspace path and thread metadata
       try {
@@ -555,6 +589,59 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
           if (metadata.model) {
             // Update state directly to avoid triggering persistence in setCurrentModel
             updateThreadState(threadId, () => ({ currentModel: metadata.model as string }))
+          }
+          if (metadata.speakerType) {
+            updateThreadState(threadId, () => ({
+              speakerType: metadata.speakerType as "orchestrator" | "agent" | "zeroclaw",
+              speakerAgentId: (metadata.speakerAgentId as string | null | undefined) ?? null
+            }))
+          }
+          if (typeof metadata.templateStarterPrompt === "string") {
+            templateStarterPrompt = metadata.templateStarterPrompt.trim()
+          }
+
+          const values = thread.thread_values
+          if (values && typeof values === "object") {
+            const rawMessages = (values as Record<string, unknown>).messages
+            if (Array.isArray(rawMessages)) {
+              persistedThreadValueMessages = rawMessages
+                .map((rawMessage, index) => {
+                  if (!rawMessage || typeof rawMessage !== "object") {
+                    return null
+                  }
+                  const record = rawMessage as Record<string, unknown>
+                  const role = record.role
+                  if (
+                    role !== "user" &&
+                    role !== "assistant" &&
+                    role !== "system" &&
+                    role !== "tool"
+                  ) {
+                    return null
+                  }
+                  const content = record.content
+                  if (typeof content !== "string") {
+                    return null
+                  }
+                  const id = typeof record.id === "string" ? record.id : `persisted-msg-${index}`
+                  const createdAtRaw = record.created_at
+                  const createdAt =
+                    typeof createdAtRaw === "string" && createdAtRaw.length > 0
+                      ? new Date(createdAtRaw)
+                      : new Date()
+                  const safeCreatedAt =
+                    Number.isNaN(createdAt.getTime()) || createdAt.getTime() <= 0
+                      ? new Date()
+                      : createdAt
+                  return {
+                    id,
+                    role,
+                    content,
+                    created_at: safeCreatedAt
+                  } as Message
+                })
+                .filter((message): message is Message => message !== null)
+            }
           }
         }
       } catch (error) {
@@ -598,6 +685,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
           const channelValues = latestCheckpoint.checkpoint?.channel_values
 
           if (channelValues?.messages && Array.isArray(channelValues.messages)) {
+            hasCheckpointMessages = channelValues.messages.length > 0
             const messages: Message[] = channelValues.messages.map((msg, index) => {
               let role: "user" | "assistant" | "system" | "tool" = "assistant"
               if (typeof msg._getType === "function") {
@@ -677,6 +765,19 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error("[ThreadContext] Failed to load thread history:", error)
+      }
+
+      if (!hasCheckpointMessages && persistedThreadValueMessages.length > 0) {
+        actions.setMessages(persistedThreadValueMessages)
+      }
+
+      if (!hasCheckpointMessages && templateStarterPrompt) {
+        updateThreadState(threadId, (state) => {
+          if (state.draftInput.trim().length > 0) {
+            return {}
+          }
+          return { draftInput: templateStarterPrompt }
+        })
       }
     },
     [getThreadActions, updateThreadState]

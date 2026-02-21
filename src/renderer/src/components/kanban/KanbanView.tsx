@@ -1,9 +1,11 @@
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAppStore } from "@/lib/store"
 import { useAllThreadStates, useAllStreamLoadingStates } from "@/lib/thread-context"
 import { KanbanColumn } from "./KanbanColumn"
 import { ThreadKanbanCard, SubagentKanbanCard } from "./KanbanCard"
-import type { Thread, Subagent } from "@/types"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import type { Thread, Subagent, TimelineEvent, ZeroClawDeploymentState } from "@/types"
 
 type KanbanStatus = "pending" | "in_progress" | "interrupted" | "done"
 
@@ -30,13 +32,176 @@ function getThreadKanbanStatus(
   return "done"
 }
 
+function toEventTimestamp(value: Date | string | number | undefined): number {
+  if (value instanceof Date) {
+    return value.getTime()
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
 export function KanbanView(): React.JSX.Element {
-  const { threads, selectThread, showSubagentsInKanban } = useAppStore()
+  const {
+    threads,
+    selectThread,
+    showSubagentsInKanban,
+    createThread,
+    agents,
+    setShowAgentsView,
+    setShowConnectorsView,
+    setShowMemoryView,
+    setShowTemplatesView,
+    setShowToolsView,
+    setShowZeroClawView
+  } = useAppStore()
   const allThreadStates = useAllThreadStates()
   const loadingStates = useAllStreamLoadingStates()
+  const [scheduledTemplateCount, setScheduledTemplateCount] = useState(0)
+  const [pausedScheduleTemplateCount, setPausedScheduleTemplateCount] = useState(0)
+  const [workspaceTimelineEvents, setWorkspaceTimelineEvents] = useState<TimelineEvent[]>([])
+  const [workspaceActivityHealthy, setWorkspaceActivityHealthy] = useState(true)
+  const [configuredProviderCount, setConfiguredProviderCount] = useState(0)
+  const [zeroClawDeployments, setZeroClawDeployments] = useState<ZeroClawDeploymentState[]>([])
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now())
+  const workspaceId = useMemo(() => agents[0]?.workspaceId || "default-workspace", [agents])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadTemplateStats = async (): Promise<void> => {
+      try {
+        const templates = await window.api.templates.list()
+        if (cancelled) {
+          return
+        }
+
+        let enabledCount = 0
+        let pausedCount = 0
+        for (const template of templates) {
+          if (template.schedule?.enabled) {
+            enabledCount += 1
+          } else if (template.schedule?.rrule) {
+            pausedCount += 1
+          }
+        }
+
+        setScheduledTemplateCount(enabledCount)
+        setPausedScheduleTemplateCount(pausedCount)
+      } catch (error) {
+        console.warn("[Kanban] Failed to load template stats.", error)
+      }
+    }
+
+    void loadTemplateStats()
+    const timer = setInterval(() => {
+      void loadTemplateStats()
+    }, 20_000)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTimeMs(Date.now())
+    }, 60_000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadWorkspaceActivity = async (): Promise<void> => {
+      try {
+        const events = await window.api.timeline.listWorkspace(workspaceId, 250)
+        if (cancelled) {
+          return
+        }
+        setWorkspaceTimelineEvents(events)
+        setWorkspaceActivityHealthy(true)
+      } catch (error) {
+        console.warn("[Kanban] Failed to load workspace timeline events.", error)
+        if (!cancelled) {
+          setWorkspaceActivityHealthy(false)
+        }
+      }
+    }
+
+    void loadWorkspaceActivity()
+    const timer = setInterval(() => {
+      void loadWorkspaceActivity()
+    }, 12_000)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [workspaceId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadZeroClawStats = async (): Promise<void> => {
+      try {
+        const deployments = await window.api.zeroclaw.deployment.list(workspaceId)
+        if (!cancelled) {
+          setZeroClawDeployments(deployments)
+        }
+      } catch (error) {
+        console.warn("[Kanban] Failed to load ZeroClaw deployments.", error)
+      }
+    }
+
+    void loadZeroClawStats()
+    const timer = setInterval(() => {
+      void loadZeroClawStats()
+    }, 12_000)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [workspaceId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadProviderStatus = async (): Promise<void> => {
+      try {
+        const providers = await window.api.models.listProviders()
+        if (!cancelled) {
+          setConfiguredProviderCount(providers.filter((provider) => provider.hasApiKey).length)
+        }
+      } catch (error) {
+        console.warn("[Kanban] Failed to load provider status.", error)
+      }
+    }
+
+    void loadProviderStatus()
+    const timer = setInterval(() => {
+      void loadProviderStatus()
+    }, 45_000)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
 
   const handleCardClick = (threadId: string): void => {
     selectThread(threadId)
+  }
+
+  const handleNewSession = async (): Promise<void> => {
+    await createThread({ title: `Thread ${new Date().toLocaleDateString()}` })
   }
 
   const categorizedThreads = useMemo(() => {
@@ -110,8 +275,277 @@ export function KanbanView(): React.JSX.Element {
     { status: "done", title: "DONE" }
   ]
 
+  const pendingApprovalsCount = useMemo(
+    () => Object.values(allThreadStates).filter((state) => Boolean(state?.pendingApproval)).length,
+    [allThreadStates]
+  )
+
+  const recentThreads = useMemo(() => {
+    return [...threads]
+      .sort((left, right) => {
+        const leftTs = new Date(left.updated_at).getTime()
+        const rightTs = new Date(right.updated_at).getTime()
+        return rightTs - leftTs
+      })
+      .slice(0, 4)
+  }, [threads])
+
+  const recentActivity = useMemo(() => {
+    return [...workspaceTimelineEvents]
+      .sort((left, right) => toEventTimestamp(right.occurredAt) - toEventTimestamp(left.occurredAt))
+      .slice(0, 6)
+  }, [workspaceTimelineEvents])
+
+  const diskChangesLast24h = useMemo(() => {
+    const cutoff = currentTimeMs - 24 * 60 * 60 * 1000
+    return workspaceTimelineEvents.filter((event) => {
+      const timestamp = toEventTimestamp(event.occurredAt)
+      const toolName = (event.toolName || "").toLowerCase()
+      return (
+        timestamp >= cutoff &&
+        event.eventType === "tool_call" &&
+        (toolName === "write_file" || toolName === "edit_file")
+      )
+    }).length
+  }, [currentTimeMs, workspaceTimelineEvents])
+
+  const lastSchedulerHeartbeatMs = useMemo(() => {
+    const matching = workspaceTimelineEvents
+      .filter((event) => (event.toolName || "").toLowerCase() === "template:schedule")
+      .map((event) => toEventTimestamp(event.occurredAt))
+      .filter((timestamp) => timestamp > 0)
+    if (matching.length === 0) {
+      return null
+    }
+    return Math.max(...matching)
+  }, [workspaceTimelineEvents])
+
+  const schedulerHealthy = useMemo(() => {
+    if (scheduledTemplateCount === 0) {
+      return true
+    }
+    if (!lastSchedulerHeartbeatMs) {
+      return false
+    }
+    return currentTimeMs - lastSchedulerHeartbeatMs <= 10 * 60 * 1000
+  }, [currentTimeMs, lastSchedulerHeartbeatMs, scheduledTemplateCount])
+  const zeroClawRunningCount = useMemo(
+    () =>
+      zeroClawDeployments.filter(
+        (deployment) => deployment.status === "running" || deployment.status === "starting"
+      ).length,
+    [zeroClawDeployments]
+  )
+  const zeroClawErrorCount = useMemo(
+    () => zeroClawDeployments.filter((deployment) => deployment.status === "error").length,
+    [zeroClawDeployments]
+  )
+
   return (
     <div className="flex flex-col h-full bg-background">
+      <div className="p-2 pb-0">
+        <div className="grid gap-2 md:grid-cols-6">
+          <div className="rounded-sm border border-border p-3 bg-background/70">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              New Session
+            </div>
+            <div className="mt-2 text-sm text-muted-foreground">
+              Start a fresh orchestrator run.
+            </div>
+            <Button size="sm" className="mt-3 h-7 text-xs" onClick={() => void handleNewSession()}>
+              New session
+            </Button>
+          </div>
+
+          <div className="rounded-sm border border-border p-3 bg-background/70">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Pending Approvals
+            </div>
+            <div className="mt-2 text-2xl font-semibold tabular-nums">{pendingApprovalsCount}</div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Human approval gates currently waiting.
+            </div>
+          </div>
+
+          <div className="rounded-sm border border-border p-3 bg-background/70">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Agent Status
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-2xl font-semibold tabular-nums">{agents.length}</span>
+              <Badge variant="outline">Registered</Badge>
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              {threads.filter((thread) => thread.status === "busy").length} active sessions.
+            </div>
+          </div>
+
+          <div className="rounded-sm border border-border p-3 bg-background/70">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Scheduled Runs
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-2xl font-semibold tabular-nums">{scheduledTemplateCount}</span>
+              <Badge variant="info">Enabled</Badge>
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              {pausedScheduleTemplateCount} templates have paused schedules.
+            </div>
+          </div>
+
+          <div className="rounded-sm border border-border p-3 bg-background/70">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              System Health
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <Badge variant={workspaceActivityHealthy ? "nominal" : "warning"}>
+                {workspaceActivityHealthy ? "Runtime OK" : "Runtime Degraded"}
+              </Badge>
+              <Badge variant={schedulerHealthy ? "nominal" : "warning"}>
+                {schedulerHealthy ? "Scheduler OK" : "Scheduler Stale"}
+              </Badge>
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              {configuredProviderCount} provider keys configured.
+            </div>
+          </div>
+
+          <div className="rounded-sm border border-border p-3 bg-background/70">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              ZeroClaw Runtime
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-2xl font-semibold tabular-nums">{zeroClawRunningCount}</span>
+              <Badge variant={zeroClawErrorCount > 0 ? "warning" : "nominal"}>
+                {zeroClawDeployments.length} deployed
+              </Badge>
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              {zeroClawErrorCount} deployment error{zeroClawErrorCount === 1 ? "" : "s"}.
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-2 rounded-sm border border-border p-3 bg-background/70">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Command Cards
+          </div>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+            <button
+              onClick={() => setShowTemplatesView(true)}
+              className="rounded-sm border border-border/70 bg-sidebar px-3 py-2 text-left transition-colors hover:bg-background-interactive"
+            >
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Templates
+              </div>
+              <div className="mt-1 text-xs">Run Workflow</div>
+            </button>
+            <button
+              onClick={() => setShowAgentsView(true)}
+              className="rounded-sm border border-border/70 bg-sidebar px-3 py-2 text-left transition-colors hover:bg-background-interactive"
+            >
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Agents
+              </div>
+              <div className="mt-1 text-xs">Command Roster</div>
+            </button>
+            <button
+              onClick={() => setShowConnectorsView(true)}
+              className="rounded-sm border border-border/70 bg-sidebar px-3 py-2 text-left transition-colors hover:bg-background-interactive"
+            >
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Connectors
+              </div>
+              <div className="mt-1 text-xs">Ops Console</div>
+            </button>
+            <button
+              onClick={() => setShowToolsView(true)}
+              className="rounded-sm border border-border/70 bg-sidebar px-3 py-2 text-left transition-colors hover:bg-background-interactive"
+            >
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Skills
+              </div>
+              <div className="mt-1 text-xs">Tool Matrix</div>
+            </button>
+            <button
+              onClick={() => setShowMemoryView(true)}
+              className="rounded-sm border border-border/70 bg-sidebar px-3 py-2 text-left transition-colors hover:bg-background-interactive"
+            >
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Memory
+              </div>
+              <div className="mt-1 text-xs">Knowledge Vault</div>
+            </button>
+            <button
+              onClick={() => setShowZeroClawView(true)}
+              className="rounded-sm border border-border/70 bg-sidebar px-3 py-2 text-left transition-colors hover:bg-background-interactive"
+            >
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                ZeroClaw
+              </div>
+              <div className="mt-1 text-xs">Deployment Ops</div>
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-2 rounded-sm border border-border p-3 bg-background/70">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Recent Sessions
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Disk changes (24h): {diskChangesLast24h}
+            </div>
+          </div>
+          <div className="mt-2 space-y-1">
+            {recentThreads.length === 0 && (
+              <div className="text-xs text-muted-foreground py-1">No sessions yet.</div>
+            )}
+            {recentThreads.map((thread) => (
+              <button
+                key={thread.thread_id}
+                onClick={() => handleCardClick(thread.thread_id)}
+                className="w-full rounded-sm border border-border/70 px-2 py-1.5 text-left text-xs hover:bg-background-interactive transition-colors"
+              >
+                <div className="truncate">{thread.title || thread.thread_id.slice(0, 16)}</div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  Updated {new Date(thread.updated_at).toLocaleTimeString()}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-2 rounded-sm border border-border p-3 bg-background/70">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Agent Activity Feed
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {workspaceTimelineEvents.length} events
+            </div>
+          </div>
+          <div className="mt-2 space-y-1">
+            {recentActivity.length === 0 && (
+              <div className="text-xs text-muted-foreground py-1">No timeline activity yet.</div>
+            )}
+            {recentActivity.map((event) => (
+              <div
+                key={event.id}
+                className="rounded-sm border border-border/70 px-2 py-1.5 text-xs text-muted-foreground"
+              >
+                <div className="truncate">
+                  {(event.summary || `${event.eventType} ${event.toolName || ""}`).trim()}
+                </div>
+                <div className="mt-0.5 text-[10px]">
+                  {new Date(toEventTimestamp(event.occurredAt)).toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="flex-1 overflow-x-auto p-2">
         <div className="flex h-full min-w-max gap-2">
           {columnData.map(({ status, title }) => {

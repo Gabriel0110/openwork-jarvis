@@ -1,0 +1,21 @@
+{
+  "latestVersion": "main",
+  "releases": [
+    {
+      "platform": "darwin-arm64",
+      "version": "main",
+      "sourceUrl": "https://codeload.github.com/openagen/zeroclaw/tar.gz/refs/heads/main",
+      "cargoPackage": "zeroclaw",
+      "gitRef": "main",
+      "binaryRelativePath": "bin/zeroclaw"
+    },
+    {
+      "platform": "darwin-x64",
+      "version": "main",
+      "sourceUrl": "https://codeload.github.com/openagen/zeroclaw/tar.gz/refs/heads/main",
+      "cargoPackage": "zeroclaw",
+      "gitRef": "main",
+      "binaryRelativePath": "bin/zeroclaw"
+    }
+  ]
+}
