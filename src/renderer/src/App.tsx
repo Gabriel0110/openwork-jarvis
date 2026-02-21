@@ -28,7 +28,6 @@ function App(): React.JSX.Element {
   const {
     currentThreadId,
     loadThreads,
-    createThread,
     showKanbanView,
     showAgentsView,
     showGraphView,
@@ -120,11 +119,6 @@ function App(): React.JSX.Element {
       try {
         await loadThreads()
         await loadAgents()
-        // Create a default thread if none exist
-        const threads = useAppStore.getState().threads
-        if (threads.length === 0) {
-          await createThread()
-        }
       } catch (error) {
         console.error("Failed to initialize:", error)
       } finally {
@@ -132,7 +126,7 @@ function App(): React.JSX.Element {
       }
     }
     init()
-  }, [loadThreads, loadAgents, createThread])
+  }, [loadThreads, loadAgents])
 
   if (isLoading) {
     return (

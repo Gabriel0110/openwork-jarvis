@@ -1,6 +1,4 @@
 import { MessageSquare, Loader2, Clock, Bot } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { cn, formatRelativeTime, truncate } from "@/lib/utils"
 import { useThreadStream } from "@/lib/thread-context"
 import type { Thread, Subagent } from "@/types"
@@ -23,47 +21,41 @@ function ThreadStatusIcon({ threadId }: { threadId: string }): React.JSX.Element
   const { isLoading } = useThreadStream(threadId)
 
   if (isLoading) {
-    return <Loader2 className="size-4 shrink-0 text-status-info animate-spin" />
+    return <Loader2 className="size-3.5 shrink-0 animate-spin text-status-info" />
   }
-  return <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+  return <MessageSquare className="size-3.5 shrink-0 text-muted-foreground/60" />
 }
 
 export function ThreadKanbanCard({ thread, status, onClick }: ThreadCardProps): React.JSX.Element {
   return (
-    <Card
+    <button
       className={cn(
-        "cursor-pointer transition-all hover:border-border-emphasis hover:bg-background-interactive",
-        status === "in_progress" && "border-status-info/50",
-        status === "interrupted" && "!border-amber-500/50 !bg-amber-500/5"
+        "w-full rounded-md border border-border/40 bg-card/60 p-3 text-left transition-all",
+        "hover:border-border hover:bg-card hover:shadow-sm",
+        status === "in_progress" && "border-status-info/30 bg-status-info/5",
+        status === "interrupted" && "border-status-warning/30 bg-status-warning/5"
       )}
       onClick={onClick}
     >
-      <CardContent className="p-3">
-        <div className="flex items-start gap-2">
-          {status === "interrupted" ? (
-            <MessageSquare className="size-4 shrink-0 text-amber-500" />
-          ) : (
+      <div className="flex items-start gap-2.5">
+        {status === "interrupted" ? (
+          <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-status-warning" />
+        ) : (
+          <div className="mt-0.5">
             <ThreadStatusIcon threadId={thread.thread_id} />
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium truncate">
-                {thread.title || truncate(thread.thread_id, 20)}
-              </span>
-              {status === "done" && (
-                <Badge variant="nominal" className="shrink-0 text-[9px]">
-                  DONE
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
-              <Clock className="size-3" />
-              {formatRelativeTime(thread.updated_at)}
-            </div>
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">
+            {thread.title || truncate(thread.thread_id, 20)}
+          </p>
+          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+            <Clock className="size-2.5" />
+            <span>{formatRelativeTime(thread.updated_at)}</span>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </button>
   )
 }
 
@@ -72,47 +64,51 @@ export function SubagentKanbanCard({
   parentThread,
   onClick
 }: SubagentCardProps): React.JSX.Element {
+  const isRunning = subagent.status === "running"
   const isDone = subagent.status === "completed" || subagent.status === "failed"
 
   return (
-    <Card
+    <button
       className={cn(
-        "cursor-pointer transition-all hover:border-border-emphasis hover:bg-background-interactive border-dashed",
-        subagent.status === "running" && "border-status-info/50"
+        "w-full rounded-md border border-dashed border-border/40 bg-card/40 p-3 text-left transition-all",
+        "hover:border-border hover:bg-card/60",
+        isRunning && "border-status-info/30"
       )}
       onClick={onClick}
     >
-      <CardContent className="p-3 overflow-hidden">
-        <div className="flex items-start gap-2 min-w-0">
-          <Bot
-            className={cn(
-              "size-4 shrink-0",
-              subagent.status === "running" ? "text-status-info" : "text-muted-foreground"
+      <div className="flex items-start gap-2.5">
+        <Bot
+          className={cn(
+            "mt-0.5 size-3.5 shrink-0",
+            isRunning ? "text-status-info" : "text-muted-foreground/60"
+          )}
+        />
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-foreground">{subagent.name}</p>
+            {isDone && (
+              <span
+                className={cn(
+                  "shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase",
+                  subagent.status === "failed"
+                    ? "bg-status-critical/10 text-status-critical"
+                    : "bg-status-nominal/10 text-status-nominal"
+                )}
+              >
+                {subagent.status === "failed" ? "Failed" : "Done"}
+              </span>
             )}
-          />
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium truncate">{subagent.name}</span>
-              {isDone && (
-                <Badge
-                  variant={subagent.status === "failed" ? "critical" : "nominal"}
-                  className="shrink-0 text-[9px]"
-                >
-                  {subagent.status === "failed" ? "FAILED" : "DONE"}
-                </Badge>
-              )}
-            </div>
-            <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5 break-words">
+          </div>
+          {subagent.description && (
+            <p className="mt-0.5 line-clamp-2 break-words text-[10px] text-muted-foreground/70">
               {subagent.description}
             </p>
-            <div className="flex items-center gap-1 mt-1 text-[10px] text-muted-foreground">
-              <span className="truncate">
-                ↳ {parentThread.title || truncate(parentThread.thread_id, 15)}
-              </span>
-            </div>
-          </div>
+          )}
+          <p className="mt-1 truncate text-[10px] text-muted-foreground/50">
+            {parentThread.title || truncate(parentThread.thread_id, 15)}
+          </p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </button>
   )
 }

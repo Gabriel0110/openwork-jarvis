@@ -208,9 +208,116 @@
   }
 }
 
+/* Apple-inspired spacing and layout utilities */
+.page-container {
+  @apply flex h-full flex-col overflow-auto bg-background px-8 py-6;
+}
+
+.page-header {
+  @apply flex-shrink-0 border-b border-border/50 px-8 py-4;
+}
+
+.page-title {
+  @apply text-base font-medium text-foreground;
+}
+
+.page-subtitle {
+  @apply mt-0.5 text-xs text-muted-foreground;
+}
+
+.page-content {
+  @apply flex-1 overflow-auto px-8 py-6;
+}
+
+.content-section {
+  @apply px-8 py-5;
+}
+
+.section-divider {
+  @apply border-t border-border/30;
+}
+
+/* Clean card styles - Apple-inspired minimal borders */
+.card-clean {
+  @apply rounded-md border border-border/40 bg-card/50 p-4 transition-colors;
+}
+
+.card-clean:hover {
+  @apply border-border/60 bg-card/70;
+}
+
+.card-interactive {
+  @apply cursor-pointer rounded-md border border-border/40 bg-card/50 p-4 transition-all;
+}
+
+.card-interactive:hover {
+  @apply border-border/70 bg-card shadow-sm;
+}
+
+.card-selected {
+  @apply border-primary/50 bg-primary/5;
+}
+
+/* Subtle metric displays */
+.metric-value {
+  @apply text-3xl font-light tabular-nums tracking-tight;
+}
+
+.metric-label {
+  @apply text-[11px] font-medium uppercase tracking-wide text-muted-foreground;
+}
+
+.metric-hint {
+  @apply mt-1 text-xs text-muted-foreground/70;
+}
+
+/* Form field groups with better spacing */
+.form-group {
+  @apply space-y-1.5;
+}
+
+.form-label {
+  @apply block text-xs font-medium text-muted-foreground;
+}
+
+.form-hint {
+  @apply text-[10px] text-muted-foreground/60;
+}
+
+/* Compact inline badges */
+.badge-subtle {
+  @apply inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium;
+}
+
+/* List items with clean hover states */
+.list-item {
+  @apply flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors;
+}
+
+.list-item:hover {
+  @apply bg-background-interactive;
+}
+
+.list-item-selected {
+  @apply bg-primary/10;
+}
+
+/* Empty state styling */
+.empty-state {
+  @apply flex flex-col items-center justify-center py-12 text-center;
+}
+
+.empty-state-icon {
+  @apply mb-3 size-8 text-muted-foreground/40;
+}
+
+.empty-state-text {
+  @apply text-sm text-muted-foreground;
+}
+
 /* Tactical typography utilities */
 .text-section-header {
-  @apply text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground;
+  @apply text-xs font-medium uppercase tracking-wide text-muted-foreground;
 }
 
 .text-data {

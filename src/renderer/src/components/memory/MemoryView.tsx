@@ -1,14 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import {
-  BookText,
-  Database,
-  Lock,
-  LockOpen,
-  RefreshCcw,
-  RotateCcw,
-  Search,
-  Trash2
-} from "lucide-react"
+import { BookText, FolderPlus, Lock, LockOpen, RefreshCcw, Search, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/lib/store"
@@ -40,16 +31,14 @@ export function MemoryView(): React.JSX.Element {
   const [entryTitle, setEntryTitle] = useState("")
   const [entryContent, setEntryContent] = useState("")
   const [entryTags, setEntryTags] = useState("")
-  const [sourcePath, setSourcePath] = useState("/docs")
+  const [sourcePath, setSourcePath] = useState("")
   const [query, setQuery] = useState("")
   const [busyMessage, setBusyMessage] = useState<string | null>(null)
 
   const workspaceId = useMemo(() => agents[0]?.workspaceId || DEFAULT_WORKSPACE_ID, [agents])
   const agentNameById = useMemo(() => {
     const map = new Map<string, string>()
-    for (const agent of agents) {
-      map.set(agent.id, agent.name)
-    }
+    for (const agent of agents) map.set(agent.id, agent.name)
     return map
   }, [agents])
 
@@ -68,7 +57,7 @@ export function MemoryView(): React.JSX.Element {
   }, [workspaceId])
 
   const refreshAll = useCallback(async () => {
-    setBusyMessage("Refreshing memory data...")
+    setBusyMessage("Refreshing...")
     try {
       await Promise.all([loadEntries(), loadSources()])
     } finally {
@@ -86,11 +75,9 @@ export function MemoryView(): React.JSX.Element {
 
   const createEntry = async (): Promise<void> => {
     const content = entryContent.trim()
-    if (!content) {
-      return
-    }
+    if (!content) return
 
-    setBusyMessage("Saving memory entry...")
+    setBusyMessage("Saving...")
     try {
       await window.api.memory.createEntry({
         workspaceId,
@@ -101,7 +88,7 @@ export function MemoryView(): React.JSX.Element {
         content,
         tags: entryTags
           .split(",")
-          .map((item) => item.trim())
+          .map((i) => i.trim())
           .filter(Boolean),
         source: "manual"
       })
@@ -115,7 +102,7 @@ export function MemoryView(): React.JSX.Element {
   }
 
   const removeEntry = async (entryId: string): Promise<void> => {
-    setBusyMessage("Deleting memory entry...")
+    setBusyMessage("Deleting...")
     try {
       await window.api.memory.deleteEntry(entryId)
       await loadEntries()
@@ -125,7 +112,7 @@ export function MemoryView(): React.JSX.Element {
   }
 
   const toggleEntryLock = async (entry: MemoryEntry): Promise<void> => {
-    setBusyMessage(`${entry.locked ? "Unlocking" : "Locking"} memory entry...`)
+    setBusyMessage(entry.locked ? "Unlocking..." : "Locking...")
     try {
       await window.api.memory.setEntryLocked(entry.id, !entry.locked)
       await loadEntries()
@@ -134,31 +121,10 @@ export function MemoryView(): React.JSX.Element {
     }
   }
 
-  const restoreEntryAsNew = async (entry: MemoryEntry): Promise<void> => {
-    setBusyMessage("Restoring memory snapshot as new entry...")
-    try {
-      await window.api.memory.createEntry({
-        workspaceId,
-        scope: entry.scope,
-        agentId: entry.agentId,
-        threadId: entry.threadId,
-        title: entry.title ? `${entry.title} (restored)` : "Restored memory",
-        content: entry.content,
-        tags: entry.tags,
-        source: `restore:${entry.id}`
-      })
-      await loadEntries()
-    } finally {
-      setBusyMessage(null)
-    }
-  }
-
   const addSource = async (): Promise<void> => {
     const pathValue = sourcePath.trim()
-    if (!pathValue) {
-      return
-    }
-    setBusyMessage("Adding RAG source...")
+    if (!pathValue) return
+    setBusyMessage("Adding source...")
     try {
       await window.api.memory.upsertSource({
         workspaceId,
@@ -172,25 +138,8 @@ export function MemoryView(): React.JSX.Element {
     }
   }
 
-  const toggleSourceEnabled = async (source: RagSource): Promise<void> => {
-    setBusyMessage(`${source.enabled ? "Disabling" : "Enabling"} source...`)
-    try {
-      await window.api.memory.upsertSource({
-        sourceId: source.id,
-        workspaceId,
-        path: source.path,
-        enabled: !source.enabled,
-        includeGlobs: source.includeGlobs,
-        excludeGlobs: source.excludeGlobs
-      })
-      await loadSources()
-    } finally {
-      setBusyMessage(null)
-    }
-  }
-
   const removeSource = async (sourceId: string): Promise<void> => {
-    setBusyMessage("Removing source...")
+    setBusyMessage("Removing...")
     try {
       await window.api.memory.deleteSource(sourceId)
       await loadSources()
@@ -199,25 +148,21 @@ export function MemoryView(): React.JSX.Element {
     }
   }
 
-  const indexSources = async (sourceIds?: string[]): Promise<void> => {
+  const indexSources = async (): Promise<void> => {
     if (!currentThreadId) {
-      setBusyMessage("Open a thread and link a workspace folder before indexing.")
+      setBusyMessage("Open a thread first.")
       return
     }
-
-    setBusyMessage("Indexing sources...")
+    setBusyMessage("Indexing...")
     try {
       const result = await window.api.memory.indexSources({
         threadId: currentThreadId,
-        workspaceId,
-        sourceIds
+        workspaceId
       })
       await loadSources()
-      setBusyMessage(
-        `Indexed ${result.indexedChunks} chunks across ${result.indexedFiles} files (${result.indexedSources} sources).`
-      )
+      setBusyMessage(`Indexed ${result.indexedChunks} chunks from ${result.indexedFiles} files.`)
     } catch (error) {
-      setBusyMessage(`Indexing failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+      setBusyMessage(`Error: ${error instanceof Error ? error.message : "Unknown"}`)
     }
   }
 
@@ -227,8 +172,7 @@ export function MemoryView(): React.JSX.Element {
       setResults([])
       return
     }
-
-    setBusyMessage("Searching memory and indexed knowledge...")
+    setBusyMessage("Searching...")
     try {
       const response = await window.api.memory.search(search, workspaceId, 8)
       setResults(response)
@@ -239,29 +183,29 @@ export function MemoryView(): React.JSX.Element {
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden border-r border-border">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      {/* Main Content */}
+      <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border/50 px-6 py-4">
           <div>
-            <div className="text-section-header">MEMORY LAYERS</div>
-            <div className="mt-1 text-xs text-muted-foreground">Workspace: {workspaceId}</div>
+            <h1 className="text-base font-medium">Memory</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">{workspaceId}</p>
           </div>
-          <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={refreshAll}>
-            <RefreshCcw className="size-3.5" />
+          <Button variant="outline" size="sm" onClick={refreshAll}>
+            <RefreshCcw className="mr-1.5 size-3.5" />
             Refresh
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 overflow-auto p-4 xl:grid-cols-[340px_1fr]">
-          <div className="space-y-4">
-            <div className="rounded-sm border border-border p-3">
-              <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Add Memory Entry
-              </div>
-              <div className="space-y-2">
+        <div className="flex flex-1 gap-6 overflow-hidden p-6">
+          {/* Left: Add Entry Form */}
+          <div className="w-80 shrink-0 space-y-4">
+            <div className="rounded-lg border border-border/40 p-4">
+              <h2 className="text-xs font-medium text-muted-foreground">Add Memory Entry</h2>
+              <div className="mt-3 space-y-3">
                 <select
                   value={entryScope}
-                  onChange={(event) => setEntryScope(event.target.value as MemoryEntryScope)}
-                  className="h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
+                  onChange={(e) => setEntryScope(e.target.value as MemoryEntryScope)}
+                  className="h-9 w-full rounded-md border border-border/60 bg-background px-3 text-sm"
                 >
                   <option value="workspace">Workspace shared</option>
                   <option value="agent">Agent private</option>
@@ -270,49 +214,47 @@ export function MemoryView(): React.JSX.Element {
                 {entryScope === "agent" && (
                   <select
                     value={entryAgentId}
-                    onChange={(event) => setEntryAgentId(event.target.value)}
-                    className="h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
+                    onChange={(e) => setEntryAgentId(e.target.value)}
+                    className="h-9 w-full rounded-md border border-border/60 bg-background px-3 text-sm"
                   >
                     <option value="">Select agent</option>
-                    {agents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>
-                        {agent.name}
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
                       </option>
                     ))}
                   </select>
                 )}
                 <input
                   value={entryTitle}
-                  onChange={(event) => setEntryTitle(event.target.value)}
-                  className="h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
+                  onChange={(e) => setEntryTitle(e.target.value)}
+                  className="h-9 w-full rounded-md border border-border/60 bg-background px-3 text-sm"
                   placeholder="Title (optional)"
                 />
                 <textarea
                   value={entryContent}
-                  onChange={(event) => setEntryContent(event.target.value)}
-                  className="h-28 w-full rounded-sm border border-input bg-background px-2 py-1.5 text-xs"
-                  placeholder="Memory content"
+                  onChange={(e) => setEntryContent(e.target.value)}
+                  className="min-h-[100px] w-full rounded-md border border-border/60 bg-background p-3 text-sm"
+                  placeholder="Memory content..."
                 />
                 <input
                   value={entryTags}
-                  onChange={(event) => setEntryTags(event.target.value)}
-                  className="h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
-                  placeholder="tags, comma, separated"
+                  onChange={(e) => setEntryTags(e.target.value)}
+                  className="h-9 w-full rounded-md border border-border/60 bg-background px-3 text-sm"
+                  placeholder="Tags (comma separated)"
                 />
-                <Button size="sm" className="h-8 w-full" onClick={createEntry}>
-                  Save entry
+                <Button size="sm" className="w-full" onClick={createEntry}>
+                  Save Entry
                 </Button>
               </div>
             </div>
 
-            <div className="rounded-sm border border-border p-3">
-              <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Filter Entries
-              </div>
+            <div className="rounded-lg border border-border/40 p-4">
+              <h2 className="text-xs font-medium text-muted-foreground">Filter</h2>
               <select
                 value={scopeFilter}
-                onChange={(event) => setScopeFilter(event.target.value as ScopeFilter)}
-                className="h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
+                onChange={(e) => setScopeFilter(e.target.value as ScopeFilter)}
+                className="mt-2 h-9 w-full rounded-md border border-border/60 bg-background px-3 text-sm"
               >
                 <option value="all">All scopes</option>
                 <option value="workspace">Workspace</option>
@@ -320,168 +262,142 @@ export function MemoryView(): React.JSX.Element {
                 <option value="session">Session</option>
               </select>
             </div>
+
+            {busyMessage && <p className="text-xs text-muted-foreground">{busyMessage}</p>}
           </div>
 
-          <div className="space-y-3">
+          {/* Center: Memory Entries */}
+          <div className="min-w-0 flex-1 overflow-auto">
             {entries.length === 0 ? (
-              <div className="rounded-sm border border-border p-6 text-center text-sm text-muted-foreground">
-                <BookText className="mx-auto mb-2 size-5 opacity-60" />
-                No memory entries found.
+              <div className="empty-state">
+                <BookText className="empty-state-icon" />
+                <p className="text-sm text-muted-foreground">No memory entries</p>
               </div>
             ) : (
-              entries.map((entry) => (
-                <div key={entry.id} className="rounded-sm border border-border p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-medium">{entry.title || "Untitled memory"}</div>
-                      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <Badge variant="outline">{toScopeLabel(entry.scope)}</Badge>
-                        {entry.locked && <Badge variant="warning">Locked</Badge>}
-                        {entry.agentId && (
-                          <span>Agent: {agentNameById.get(entry.agentId) || entry.agentId}</span>
-                        )}
-                        {entry.threadId && <span>Thread: {entry.threadId.slice(0, 8)}</span>}
+              <div className="space-y-2">
+                {entries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="rounded-lg border border-border/40 bg-card/50 p-4 transition-colors hover:border-border"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{entry.title || "Untitled"}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px]">
+                            {toScopeLabel(entry.scope)}
+                          </Badge>
+                          {entry.locked && (
+                            <Badge variant="warning" className="text-[10px]">
+                              Locked
+                            </Badge>
+                          )}
+                          {entry.agentId && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {agentNameById.get(entry.agentId) || entry.agentId}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => void toggleEntryLock(entry)}
+                        >
+                          {entry.locked ? (
+                            <LockOpen className="size-3.5" />
+                          ) : (
+                            <Lock className="size-3.5" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          disabled={entry.locked}
+                          onClick={() => void removeEntry(entry.id)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="size-7"
-                      onClick={() => {
-                        void toggleEntryLock(entry)
-                      }}
-                    >
-                      {entry.locked ? (
-                        <LockOpen className="size-3.5" />
-                      ) : (
-                        <Lock className="size-3.5" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="size-7"
-                      onClick={() => {
-                        void restoreEntryAsNew(entry)
-                      }}
-                    >
-                      <RotateCcw className="size-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="size-7"
-                      disabled={entry.locked}
-                      onClick={() => {
-                        void removeEntry(entry.id)
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                      {entry.content}
+                    </p>
+                    <p className="mt-2 text-[10px] text-muted-foreground/60">
+                      {formatTimestamp(entry.updatedAt)}
+                    </p>
                   </div>
-                  <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
-                    {entry.content}
-                  </p>
-                  <div className="mt-2 text-[11px] text-muted-foreground">
-                    Updated {formatTimestamp(entry.updatedAt)}
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </div>
       </section>
 
-      <aside className="flex w-[360px] flex-col overflow-hidden bg-sidebar">
-        <div className="border-b border-border px-4 py-3">
-          <div className="text-section-header">LOCAL RAG</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Configure indexed folders and retrieval checks
-          </div>
+      {/* Right Sidebar: RAG Sources */}
+      <aside className="flex w-80 flex-col border-l border-border/50 bg-sidebar/50">
+        <div className="border-b border-border/30 px-4 py-3">
+          <h2 className="text-xs font-medium text-muted-foreground">Local RAG</h2>
+          <p className="mt-0.5 text-[10px] text-muted-foreground/60">Index folders for retrieval</p>
         </div>
 
-        <div className="space-y-4 overflow-auto p-4">
-          <div className="rounded-sm border border-border p-3">
-            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Add Source Folder
-            </div>
+        <div className="flex-1 space-y-4 overflow-auto p-4">
+          {/* Add Source */}
+          <div className="space-y-2">
             <div className="flex gap-2">
               <input
                 value={sourcePath}
-                onChange={(event) => setSourcePath(event.target.value)}
-                className="h-8 min-w-0 flex-1 rounded-sm border border-input bg-background px-2 text-xs"
-                placeholder="/docs"
+                onChange={(e) => setSourcePath(e.target.value)}
+                className="h-9 min-w-0 flex-1 rounded-md border border-border/60 bg-background px-3 text-sm"
+                placeholder="/path/to/docs"
               />
-              <Button size="sm" className="h-8 px-3" onClick={addSource}>
-                Add
+              <Button size="sm" className="h-9 px-3" onClick={addSource}>
+                <FolderPlus className="size-4" />
               </Button>
             </div>
             <Button
-              size="sm"
               variant="outline"
-              className="mt-2 h-8 w-full"
+              size="sm"
+              className="w-full"
               disabled={!currentThreadId}
-              onClick={() => {
-                void indexSources()
-              }}
+              onClick={() => void indexSources()}
             >
               Index All Sources
             </Button>
           </div>
 
+          {/* Sources List */}
           <div className="space-y-2">
             {sources.length === 0 ? (
-              <div className="rounded-sm border border-border p-3 text-xs text-muted-foreground">
-                No sources configured.
-              </div>
+              <p className="text-xs text-muted-foreground">No sources configured.</p>
             ) : (
               sources.map((source) => (
-                <div key={source.id} className="rounded-sm border border-border p-3">
+                <div key={source.id} className="rounded-md border border-border/40 bg-card/50 p-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-xs font-medium">{source.path}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <Badge variant={source.enabled ? "nominal" : "outline"}>
-                          {source.enabled ? "Enabled" : "Disabled"}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{source.path}</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Badge
+                          variant={source.enabled ? "nominal" : "outline"}
+                          className="text-[9px]"
+                        >
+                          {source.enabled ? "Active" : "Disabled"}
                         </Badge>
-                        <Badge variant="outline">{source.status}</Badge>
-                        <span>{source.chunkCount} chunks</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {source.chunkCount} chunks
+                        </span>
                       </div>
-                      {source.lastError && (
-                        <p className="mt-1 text-[11px] text-status-critical">{source.lastError}</p>
-                      )}
                     </div>
                     <Button
                       variant="ghost"
-                      size="icon-sm"
-                      className="size-7"
-                      onClick={() => {
-                        void removeSource(source.id)
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <Button
-                      variant="outline"
                       size="sm"
-                      className="h-7 flex-1 text-xs"
-                      onClick={() => {
-                        void toggleSourceEnabled(source)
-                      }}
+                      className="h-6 w-6 p-0"
+                      onClick={() => void removeSource(source.id)}
                     >
-                      {source.enabled ? "Disable" : "Enable"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-7 flex-1 text-xs"
-                      disabled={!currentThreadId || !source.enabled}
-                      onClick={() => {
-                        void indexSources([source.id])
-                      }}
-                    >
-                      Index
+                      <Trash2 className="size-3" />
                     </Button>
                   </div>
                 </div>
@@ -489,55 +405,45 @@ export function MemoryView(): React.JSX.Element {
             )}
           </div>
 
-          <div className="rounded-sm border border-border p-3">
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {/* Search */}
+          <div className="border-t border-border/30 pt-4">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <Search className="size-3.5" />
-              Retrieval Probe
+              Retrieval Test
             </div>
-            <div className="flex gap-2">
+            <div className="mt-2 flex gap-2">
               <input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                className="h-8 min-w-0 flex-1 rounded-sm border border-input bg-background px-2 text-xs"
-                placeholder="Search memory..."
+                onChange={(e) => setQuery(e.target.value)}
+                className="h-9 min-w-0 flex-1 rounded-md border border-border/60 bg-background px-3 text-sm"
+                placeholder="Search..."
               />
-              <Button size="sm" className="h-8 px-3" onClick={runSearch}>
+              <Button size="sm" className="h-9 px-3" onClick={runSearch}>
                 Run
               </Button>
             </div>
-
             <div className="mt-3 space-y-2">
               {results.length === 0 ? (
-                <div className="text-xs text-muted-foreground">No retrieval results yet.</div>
+                <p className="text-[10px] text-muted-foreground">No results</p>
               ) : (
-                results.map((result) => (
+                results.map((r) => (
                   <div
-                    key={`${result.source}-${result.id}`}
-                    className="rounded-sm border border-border p-2"
+                    key={`${r.source}-${r.id}`}
+                    className="rounded-md border border-border/40 p-2"
                   >
-                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <Database className="size-3.5" />
-                      <span>{result.source.toUpperCase()}</span>
-                      <span>score {result.score}</span>
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <span className="uppercase">{r.source}</span>
+                      <span>score {r.score.toFixed(2)}</span>
                     </div>
-                    {result.title && <div className="mt-1 text-xs font-medium">{result.title}</div>}
-                    {result.path && (
-                      <div className="mt-1 truncate text-[11px] text-muted-foreground">
-                        {result.path}
-                      </div>
-                    )}
-                    <p className="mt-1 text-xs text-muted-foreground">{result.contentSnippet}</p>
+                    {r.title && <p className="mt-1 text-xs font-medium">{r.title}</p>}
+                    <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
+                      {r.contentSnippet}
+                    </p>
                   </div>
                 ))
               )}
             </div>
           </div>
-
-          {busyMessage && (
-            <div className="rounded-sm border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
-              {busyMessage}
-            </div>
-          )}
         </div>
       </aside>
     </div>

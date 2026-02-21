@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Bot,
+  ChevronDown,
   Download,
   Play,
   Plus,
   RefreshCw,
   RotateCcw,
   Save,
-  ShieldCheck,
   Square,
   Trash2
 } from "lucide-react"
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAppStore } from "@/lib/store"
+import { cn } from "@/lib/utils"
 import type {
   TimelineEvent,
   ZeroClawCapabilityMode,
@@ -116,9 +117,7 @@ function formToPolicy(form: ZeroClawDeploymentFormState): ZeroClawCapabilityPoli
 
 function formatDate(value: Date | string): string {
   const parsed = value instanceof Date ? value : new Date(value)
-  if (!Number.isFinite(parsed.getTime())) {
-    return "Unknown"
-  }
+  if (!Number.isFinite(parsed.getTime())) return "Unknown"
   return parsed.toLocaleString()
 }
 
@@ -140,9 +139,7 @@ function parseZeroClawInvocationDiagnostics(
 ): ZeroClawInvocationDiagnostics[] {
   return timelineEvents
     .filter((event) => {
-      if (event.eventType !== "tool_result" && event.eventType !== "error") {
-        return false
-      }
+      if (event.eventType !== "tool_result" && event.eventType !== "error") return false
       const payload = event.payload as Record<string, unknown>
       const speakerType = toStringValue(payload.speakerType)
       const payloadDeploymentId = toStringValue(payload.deploymentId)
@@ -187,20 +184,12 @@ function redactSecrets(value: unknown, keyHint?: string): unknown {
   const isSensitiveKey = keyHint ? sensitiveKeyPattern.test(keyHint) : false
 
   if (isSensitiveKey) {
-    if (typeof value === "string" && value.length > 0) {
-      return "[REDACTED]"
-    }
-    if (Array.isArray(value)) {
-      return value.map(() => "[REDACTED]")
-    }
-    if (typeof value === "object" && value !== null) {
-      return "[REDACTED]"
-    }
+    if (typeof value === "string" && value.length > 0) return "[REDACTED]"
+    if (Array.isArray(value)) return value.map(() => "[REDACTED]")
+    if (typeof value === "object" && value !== null) return "[REDACTED]"
   }
 
-  if (Array.isArray(value)) {
-    return value.map((item) => redactSecrets(item))
-  }
+  if (Array.isArray(value)) return value.map((item) => redactSecrets(item))
   if (typeof value === "object" && value !== null) {
     const result: Record<string, unknown> = {}
     for (const [key, nested] of Object.entries(value)) {
@@ -209,12 +198,42 @@ function redactSecrets(value: unknown, keyHint?: string): unknown {
     return result
   }
   if (typeof value === "string") {
-    if (value.startsWith("sk-") || value.startsWith("xox")) {
-      return "[REDACTED]"
-    }
+    if (value.startsWith("sk-") || value.startsWith("xox")) return "[REDACTED]"
     return value
   }
   return value
+}
+
+// Collapsible section component
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  badge,
+  children
+}: {
+  title: string
+  defaultOpen?: boolean
+  badge?: React.ReactNode
+  children: React.ReactNode
+}): React.JSX.Element {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="rounded-md border border-border">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-background-interactive"
+      >
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{title}</span>
+          {badge}
+        </div>
+        <ChevronDown
+          className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && <div className="border-t border-border p-4">{children}</div>}
+    </div>
+  )
 }
 
 export function ZeroClawView(): React.JSX.Element {
@@ -250,12 +269,14 @@ export function ZeroClawView(): React.JSX.Element {
   const [zeroClawForm, setZeroClawForm] = useState<ZeroClawDeploymentFormState>(
     defaultZeroClawDeploymentForm
   )
+  const [showAdvancedPolicy, setShowAdvancedPolicy] = useState(false)
   const installActivityLogRef = useRef<HTMLDivElement | null>(null)
 
   const selectedZeroClawDeployment = useMemo(
     () => zeroClawDeployments.find((entry) => entry.id === selectedZeroClawDeploymentId) || null,
     [selectedZeroClawDeploymentId, zeroClawDeployments]
   )
+
   const zeroClawInvocationStats = useMemo(() => {
     if (zeroClawInvocations.length === 0) {
       return {
@@ -284,6 +305,7 @@ export function ZeroClawView(): React.JSX.Element {
       averageDurationMs: Math.round(totals.durationMs / zeroClawInvocations.length)
     }
   }, [zeroClawInvocations])
+
   const filteredZeroClawInvocations = useMemo(() => {
     return zeroClawInvocations.filter((entry) => {
       const normalizedTransport = entry.transport.trim().toLowerCase()
@@ -293,18 +315,13 @@ export function ZeroClawView(): React.JSX.Element {
         normalizedTransport === "json"
           ? normalizedTransport
           : "unknown"
-      if (transportFilter !== "all" && transportBucket !== transportFilter) {
-        return false
-      }
-      if (fallbackOnly && !entry.syntheticFallbackUsed) {
-        return false
-      }
-      if (errorsOnly && !entry.hasError) {
-        return false
-      }
+      if (transportFilter !== "all" && transportBucket !== transportFilter) return false
+      if (fallbackOnly && !entry.syntheticFallbackUsed) return false
+      if (errorsOnly && !entry.hasError) return false
       return true
     })
   }, [errorsOnly, fallbackOnly, transportFilter, zeroClawInvocations])
+
   const recentZeroClawInvocations = useMemo(
     () => filteredZeroClawInvocations.slice(0, 40),
     [filteredZeroClawInvocations]
@@ -316,12 +333,9 @@ export function ZeroClawView(): React.JSX.Element {
         const activity = await window.api.zeroclaw.install.getActivity()
         setZeroClawInstallActivity(activity)
       } catch (error) {
-        if (options?.silent) {
-          return
+        if (!options?.silent) {
+          setZeroClawStatusMessage(`Failed: ${error instanceof Error ? error.message : "Unknown"}`)
         }
-        setZeroClawStatusMessage(
-          `Failed loading install activity: ${error instanceof Error ? error.message : "Unknown error"}`
-        )
       }
     },
     []
@@ -340,19 +354,13 @@ export function ZeroClawView(): React.JSX.Element {
       setZeroClawInstallActivity(activity)
       setSelectedUpgradeVersion((current) => {
         const available = status.availableVersions || []
-        if (available.length === 0) {
-          return ""
-        }
-        if (current && available.includes(current)) {
-          return current
-        }
+        if (available.length === 0) return ""
+        if (current && available.includes(current)) return current
         const preferred = available.find((entry) => entry !== status.activeVersion)
         return preferred || available[0]
       })
     } catch (error) {
-      setZeroClawStatusMessage(
-        `Failed loading ZeroClaw status: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setZeroClawStatusMessage(`Failed: ${error instanceof Error ? error.message : "Unknown"}`)
     } finally {
       setIsLoading(false)
     }
@@ -364,10 +372,8 @@ export function ZeroClawView(): React.JSX.Element {
         !selectedZeroClawDeploymentId ||
         !selectedZeroClawDeployment ||
         isZeroClawCreatingDeployment
-      ) {
+      )
         return
-      }
-
       try {
         const [health, logs, timelineEvents] = await Promise.all([
           window.api.zeroclaw.runtime.getHealth(selectedZeroClawDeploymentId),
@@ -382,14 +388,9 @@ export function ZeroClawView(): React.JSX.Element {
         )
         setLastDiagnosticsRefreshAt(new Date())
       } catch (error) {
-        if (options?.silent) {
-          return
+        if (!options?.silent) {
+          setZeroClawStatusMessage(`Failed: ${error instanceof Error ? error.message : "Unknown"}`)
         }
-        setZeroClawStatusMessage(
-          `Failed loading deployment runtime data: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
-        )
       }
     },
     [isZeroClawCreatingDeployment, selectedZeroClawDeployment, selectedZeroClawDeploymentId]
@@ -409,7 +410,6 @@ export function ZeroClawView(): React.JSX.Element {
       setLastDiagnosticsRefreshAt(null)
       return
     }
-
     const hasSelected = selectedZeroClawDeploymentId
       ? zeroClawDeployments.some((entry) => entry.id === selectedZeroClawDeploymentId)
       : false
@@ -419,29 +419,20 @@ export function ZeroClawView(): React.JSX.Element {
   }, [isZeroClawCreatingDeployment, selectedZeroClawDeploymentId, zeroClawDeployments])
 
   useEffect(() => {
-    if (!zeroClawDeploymentFocusId || zeroClawDeployments.length === 0) {
-      return
-    }
-
-    const focused = zeroClawDeployments.find(
-      (deployment) => deployment.id === zeroClawDeploymentFocusId
-    )
+    if (!zeroClawDeploymentFocusId || zeroClawDeployments.length === 0) return
+    const focused = zeroClawDeployments.find((d) => d.id === zeroClawDeploymentFocusId)
     if (focused) {
       setIsZeroClawCreatingDeployment(false)
       setSelectedZeroClawDeploymentId(focused.id)
-      setZeroClawStatusMessage(`Focused deployment "${focused.name}".`)
+      setZeroClawStatusMessage(`Focused "${focused.name}".`)
     } else {
-      setZeroClawStatusMessage("Focused ZeroClaw deployment was not found.")
+      setZeroClawStatusMessage("Focused deployment not found.")
     }
-
     setZeroClawDeploymentFocusId(null)
   }, [zeroClawDeploymentFocusId, zeroClawDeployments, setZeroClawDeploymentFocusId])
 
   useEffect(() => {
-    if (!selectedZeroClawDeployment || isZeroClawCreatingDeployment) {
-      return
-    }
-
+    if (!selectedZeroClawDeployment || isZeroClawCreatingDeployment) return
     setZeroClawForm({
       ...policyToForm(selectedZeroClawDeployment.policy),
       name: selectedZeroClawDeployment.name,
@@ -462,10 +453,8 @@ export function ZeroClawView(): React.JSX.Element {
       !selectedZeroClawDeploymentId ||
       !selectedZeroClawDeployment ||
       isZeroClawCreatingDeployment
-    ) {
+    )
       return
-    }
-
     void refreshSelectedDeploymentRuntimeData()
   }, [
     isZeroClawCreatingDeployment,
@@ -475,21 +464,13 @@ export function ZeroClawView(): React.JSX.Element {
   ])
 
   useEffect(() => {
-    if (zeroClawInstallActivity?.state !== "running") {
-      return
-    }
-    const timer = setInterval(() => {
-      void refreshInstallActivity({ silent: true })
-    }, 500)
-    return () => {
-      clearInterval(timer)
-    }
+    if (zeroClawInstallActivity?.state !== "running") return
+    const timer = setInterval(() => void refreshInstallActivity({ silent: true }), 500)
+    return () => clearInterval(timer)
   }, [refreshInstallActivity, zeroClawInstallActivity?.state])
 
   useEffect(() => {
-    if (!installActivityLogRef.current) {
-      return
-    }
+    if (!installActivityLogRef.current) return
     installActivityLogRef.current.scrollTop = installActivityLogRef.current.scrollHeight
   }, [zeroClawInstallActivity?.lines.length])
 
@@ -499,17 +480,13 @@ export function ZeroClawView(): React.JSX.Element {
       !selectedZeroClawDeploymentId ||
       !selectedZeroClawDeployment ||
       isZeroClawCreatingDeployment
-    ) {
+    )
       return
-    }
-
-    const timer = setInterval(() => {
-      void refreshSelectedDeploymentRuntimeData({ silent: true })
-    }, 2500)
-
-    return () => {
-      clearInterval(timer)
-    }
+    const timer = setInterval(
+      () => void refreshSelectedDeploymentRuntimeData({ silent: true }),
+      2500
+    )
+    return () => clearInterval(timer)
   }, [
     autoRefreshDiagnostics,
     isZeroClawCreatingDeployment,
@@ -522,8 +499,9 @@ export function ZeroClawView(): React.JSX.Element {
     setIsZeroClawCreatingDeployment(true)
     setSelectedZeroClawDeploymentId(null)
     setZeroClawInvocations([])
-    setZeroClawStatusMessage("Configure and save a new ZeroClaw deployment.")
+    setZeroClawStatusMessage("Configure a new deployment.")
     setZeroClawForm(defaultZeroClawDeploymentForm())
+    setShowAdvancedPolicy(true)
   }
 
   function selectZeroClawDeployment(deploymentId: string): void {
@@ -542,13 +520,11 @@ export function ZeroClawView(): React.JSX.Element {
       await refreshInstallActivity({ silent: true })
       await load()
       setZeroClawStatusMessage(
-        status.activeVersion
-          ? `Installed runtime version ${status.activeVersion}.`
-          : "Runtime install completed."
+        status.activeVersion ? `Installed ${status.activeVersion}.` : "Install completed."
       )
     } catch (error) {
       setZeroClawStatusMessage(
-        `Runtime install failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Install failed: ${error instanceof Error ? error.message : "Unknown"}`
       )
     } finally {
       setIsZeroClawBusy(false)
@@ -562,7 +538,7 @@ export function ZeroClawView(): React.JSX.Element {
       setZeroClawStatusMessage(result.message)
     } catch (error) {
       setZeroClawStatusMessage(
-        `Runtime verify failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Verify failed: ${error instanceof Error ? error.message : "Unknown"}`
       )
     } finally {
       setIsZeroClawBusy(false)
@@ -571,7 +547,7 @@ export function ZeroClawView(): React.JSX.Element {
 
   async function upgradeZeroClawRuntime(): Promise<void> {
     if (!selectedUpgradeVersion) {
-      setZeroClawStatusMessage("Select a runtime version to upgrade.")
+      setZeroClawStatusMessage("Select a version to upgrade.")
       return
     }
     setIsZeroClawBusy(true)
@@ -582,10 +558,10 @@ export function ZeroClawView(): React.JSX.Element {
       setZeroClawStatus(status)
       await refreshInstallActivity({ silent: true })
       await load()
-      setZeroClawStatusMessage(`Upgraded managed runtime to ${selectedUpgradeVersion}.`)
+      setZeroClawStatusMessage(`Upgraded to ${selectedUpgradeVersion}.`)
     } catch (error) {
       setZeroClawStatusMessage(
-        `Runtime upgrade failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Upgrade failed: ${error instanceof Error ? error.message : "Unknown"}`
       )
     } finally {
       setIsZeroClawBusy(false)
@@ -594,7 +570,7 @@ export function ZeroClawView(): React.JSX.Element {
 
   async function copyInstallActivityLog(): Promise<void> {
     if (!zeroClawInstallActivity || zeroClawInstallActivity.lines.length === 0) {
-      setZeroClawStatusMessage("No install activity log lines available.")
+      setZeroClawStatusMessage("No logs available.")
       return
     }
     const payload = zeroClawInstallActivity.lines
@@ -604,11 +580,9 @@ export function ZeroClawView(): React.JSX.Element {
       .join("\n")
     try {
       await navigator.clipboard.writeText(payload)
-      setZeroClawStatusMessage("Copied install activity logs to clipboard.")
-    } catch (error) {
-      setZeroClawStatusMessage(
-        `Failed copying install logs: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setZeroClawStatusMessage("Copied logs.")
+    } catch {
+      setZeroClawStatusMessage("Copy failed.")
     }
   }
 
@@ -630,7 +604,7 @@ export function ZeroClawView(): React.JSX.Element {
         await load()
         setIsZeroClawCreatingDeployment(false)
         setSelectedZeroClawDeploymentId(created.id)
-        setZeroClawStatusMessage(`Created deployment "${created.name}".`)
+        setZeroClawStatusMessage(`Created "${created.name}".`)
         return
       }
 
@@ -650,43 +624,32 @@ export function ZeroClawView(): React.JSX.Element {
       })
       await load()
       setSelectedZeroClawDeploymentId(updated.id)
-      setZeroClawStatusMessage(`Saved deployment "${updated.name}".`)
+      setZeroClawStatusMessage(`Saved "${updated.name}".`)
     } catch (error) {
-      setZeroClawStatusMessage(
-        `Failed saving deployment: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setZeroClawStatusMessage(`Failed: ${error instanceof Error ? error.message : "Unknown"}`)
     } finally {
       setIsZeroClawBusy(false)
     }
   }
 
   async function deleteZeroClawDeployment(): Promise<void> {
-    if (!selectedZeroClawDeployment) {
-      return
-    }
-    if (!window.confirm(`Delete ZeroClaw deployment "${selectedZeroClawDeployment.name}"?`)) {
-      return
-    }
-
+    if (!selectedZeroClawDeployment) return
+    if (!window.confirm(`Delete "${selectedZeroClawDeployment.name}"?`)) return
     setIsZeroClawBusy(true)
     try {
       await window.api.zeroclaw.deployment.delete(selectedZeroClawDeployment.id)
       await load()
       setSelectedZeroClawDeploymentId(null)
-      setZeroClawStatusMessage(`Deleted deployment "${selectedZeroClawDeployment.name}".`)
+      setZeroClawStatusMessage(`Deleted "${selectedZeroClawDeployment.name}".`)
     } catch (error) {
-      setZeroClawStatusMessage(
-        `Failed deleting deployment: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setZeroClawStatusMessage(`Failed: ${error instanceof Error ? error.message : "Unknown"}`)
     } finally {
       setIsZeroClawBusy(false)
     }
   }
 
   async function runtimeAction(action: "start" | "stop" | "restart"): Promise<void> {
-    if (!selectedZeroClawDeployment) {
-      return
-    }
+    if (!selectedZeroClawDeployment) return
     setIsZeroClawBusy(true)
     setZeroClawStatusMessage(null)
     try {
@@ -699,34 +662,20 @@ export function ZeroClawView(): React.JSX.Element {
       }
       await load()
       await refreshSelectedDeploymentRuntimeData()
-      setZeroClawStatusMessage(
-        `${action[0].toUpperCase()}${action.slice(1)} command sent to ${selectedZeroClawDeployment.name}.`
-      )
+      setZeroClawStatusMessage(`${action[0].toUpperCase()}${action.slice(1)} sent.`)
     } catch (error) {
-      setZeroClawStatusMessage(
-        `Failed runtime action: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setZeroClawStatusMessage(`Failed: ${error instanceof Error ? error.message : "Unknown"}`)
     } finally {
       setIsZeroClawBusy(false)
     }
   }
 
   async function applyRuntimeVersionToDeployment(): Promise<void> {
-    if (!selectedZeroClawDeployment) {
-      setZeroClawStatusMessage("Select a deployment first.")
-      return
-    }
-    if (!selectedUpgradeVersion) {
-      setZeroClawStatusMessage("Select a runtime version first.")
-      return
-    }
+    if (!selectedZeroClawDeployment || !selectedUpgradeVersion) return
     if (selectedUpgradeVersion === selectedZeroClawDeployment.runtimeVersion) {
-      setZeroClawStatusMessage(
-        `${selectedZeroClawDeployment.name} already uses runtime ${selectedUpgradeVersion}.`
-      )
+      setZeroClawStatusMessage("Already using this version.")
       return
     }
-
     setIsZeroClawBusy(true)
     setZeroClawStatusMessage(null)
     try {
@@ -739,15 +688,9 @@ export function ZeroClawView(): React.JSX.Element {
       await load()
       setSelectedZeroClawDeploymentId(updated.id)
       await refreshSelectedDeploymentRuntimeData()
-      setZeroClawStatusMessage(
-        selectedZeroClawDeployment.status === "running"
-          ? `Applied runtime ${selectedUpgradeVersion} to ${selectedZeroClawDeployment.name} and restarted runtime.`
-          : `Applied runtime ${selectedUpgradeVersion} to ${selectedZeroClawDeployment.name}.`
-      )
+      setZeroClawStatusMessage(`Applied ${selectedUpgradeVersion}.`)
     } catch (error) {
-      setZeroClawStatusMessage(
-        `Failed applying runtime version: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setZeroClawStatusMessage(`Failed: ${error instanceof Error ? error.message : "Unknown"}`)
     } finally {
       setIsZeroClawBusy(false)
     }
@@ -760,15 +703,11 @@ export function ZeroClawView(): React.JSX.Element {
       setZeroClawDoctorReport(report)
       const failures = report.checks.filter((check) => !check.ok)
       setZeroClawStatusMessage(
-        failures.length === 0
-          ? "Doctor checks passed."
-          : `Doctor found ${failures.length} issue(s): ${failures
-              .map((check) => check.label)
-              .join(", ")}`
+        failures.length === 0 ? "Doctor passed." : `Doctor found ${failures.length} issue(s).`
       )
     } catch (error) {
       setZeroClawStatusMessage(
-        `Doctor failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Doctor failed: ${error instanceof Error ? error.message : "Unknown"}`
       )
     } finally {
       setIsZeroClawBusy(false)
@@ -779,16 +718,12 @@ export function ZeroClawView(): React.JSX.Element {
     try {
       await selectThread(threadId)
     } catch (error) {
-      setZeroClawStatusMessage(
-        `Failed opening thread: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setZeroClawStatusMessage(`Failed: ${error instanceof Error ? error.message : "Unknown"}`)
     }
   }
 
   async function loadOlderRuntimeEvents(): Promise<void> {
-    if (!selectedZeroClawDeploymentId || !zeroClawEventsCursor) {
-      return
-    }
+    if (!selectedZeroClawDeploymentId || !zeroClawEventsCursor) return
     setIsZeroClawBusy(true)
     try {
       const result = await window.api.zeroclaw.logs.get(
@@ -798,21 +733,15 @@ export function ZeroClawView(): React.JSX.Element {
       )
       setZeroClawEvents((current) => {
         const mergedById = new Map<string, ZeroClawRuntimeEvent>()
-        for (const entry of current) {
-          mergedById.set(entry.id, entry)
-        }
-        for (const entry of result.events) {
-          mergedById.set(entry.id, entry)
-        }
+        for (const entry of current) mergedById.set(entry.id, entry)
+        for (const entry of result.events) mergedById.set(entry.id, entry)
         return Array.from(mergedById.values()).sort(
           (left, right) => right.occurredAt.getTime() - left.occurredAt.getTime()
         )
       })
       setZeroClawEventsCursor(result.nextCursor)
     } catch (error) {
-      setZeroClawStatusMessage(
-        `Failed loading older runtime events: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setZeroClawStatusMessage(`Failed: ${error instanceof Error ? error.message : "Unknown"}`)
     } finally {
       setIsZeroClawBusy(false)
     }
@@ -820,10 +749,9 @@ export function ZeroClawView(): React.JSX.Element {
 
   function exportInvocationDiagnosticsJson(): void {
     if (!selectedZeroClawDeployment || zeroClawInvocations.length === 0) {
-      setZeroClawStatusMessage("No invocation diagnostics available to export.")
+      setZeroClawStatusMessage("No diagnostics to export.")
       return
     }
-
     try {
       const exportedAt = new Date().toISOString()
       const payload = {
@@ -854,9 +782,7 @@ export function ZeroClawView(): React.JSX.Element {
           pairingRecovered: entry.pairingRecovered
         }))
       }
-      const fileName = `zeroclaw-diagnostics-${sanitizeFilename(
-        selectedZeroClawDeployment.name || selectedZeroClawDeployment.id
-      )}-${exportedAt.replace(/[:.]/g, "-")}.json`
+      const fileName = `zeroclaw-diagnostics-${sanitizeFilename(selectedZeroClawDeployment.name || selectedZeroClawDeployment.id)}-${exportedAt.replace(/[:.]/g, "-")}.json`
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement("a")
@@ -866,28 +792,25 @@ export function ZeroClawView(): React.JSX.Element {
       anchor.click()
       anchor.remove()
       URL.revokeObjectURL(url)
-      setZeroClawStatusMessage(`Exported diagnostics JSON (${payload.invocations.length} entries).`)
+      setZeroClawStatusMessage(`Exported ${payload.invocations.length} entries.`)
     } catch (error) {
       setZeroClawStatusMessage(
-        `Failed exporting diagnostics: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Export failed: ${error instanceof Error ? error.message : "Unknown"}`
       )
     }
   }
 
   async function exportDiagnosticsBundleJson(): Promise<void> {
     if (!selectedZeroClawDeployment) {
-      setZeroClawStatusMessage("Select a deployment to export diagnostics.")
+      setZeroClawStatusMessage("Select a deployment first.")
       return
     }
-
     try {
       const exportedAt = new Date().toISOString()
       const report =
         zeroClawDoctorReport ||
         (await window.api.zeroclaw.doctor.run(selectedZeroClawDeployment.id))
-      if (!zeroClawDoctorReport) {
-        setZeroClawDoctorReport(report)
-      }
+      if (!zeroClawDoctorReport) setZeroClawDoctorReport(report)
       const payload = {
         exportedAt,
         runtimeInstall: {
@@ -916,11 +839,7 @@ export function ZeroClawView(): React.JSX.Element {
         diagnostics: {
           lastRefreshAt: lastDiagnosticsRefreshAt ? lastDiagnosticsRefreshAt.toISOString() : null,
           autoRefresh: autoRefreshDiagnostics,
-          filters: {
-            transport: transportFilter,
-            fallbackOnly,
-            errorsOnly
-          },
+          filters: { transport: transportFilter, fallbackOnly, errorsOnly },
           invocationStats: zeroClawInvocationStats
         },
         invocations: redactSecrets(
@@ -954,9 +873,7 @@ export function ZeroClawView(): React.JSX.Element {
           }))
         )
       }
-      const fileName = `zeroclaw-diagnostics-bundle-${sanitizeFilename(
-        selectedZeroClawDeployment.name || selectedZeroClawDeployment.id
-      )}-${exportedAt.replace(/[:.]/g, "-")}.json`
+      const fileName = `zeroclaw-bundle-${sanitizeFilename(selectedZeroClawDeployment.name || selectedZeroClawDeployment.id)}-${exportedAt.replace(/[:.]/g, "-")}.json`
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement("a")
@@ -966,750 +883,726 @@ export function ZeroClawView(): React.JSX.Element {
       anchor.click()
       anchor.remove()
       URL.revokeObjectURL(url)
-      setZeroClawStatusMessage("Exported diagnostics bundle JSON.")
+      setZeroClawStatusMessage("Exported bundle.")
     } catch (error) {
       setZeroClawStatusMessage(
-        `Failed exporting diagnostics bundle: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Export failed: ${error instanceof Error ? error.message : "Unknown"}`
       )
     }
   }
 
   return (
-    <section className="flex h-full overflow-hidden bg-background">
-      <div className="flex flex-1 flex-col overflow-auto p-4">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-section-header">ZEROCLAW</div>
-            <div className="text-xs text-muted-foreground">
-              Managed runtime install, deployment policy, lifecycle, and diagnostics.
-            </div>
-          </div>
-          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => void load()}>
-            <RefreshCw className="mr-1 size-3.5" />
-            {isLoading ? "Refreshing..." : "Refresh"}
-          </Button>
+    <section className="page-container">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">ZeroClaw</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Managed runtime, deployments, and diagnostics
+          </p>
         </div>
+        <Button size="sm" variant="outline" onClick={() => void load()} disabled={isLoading}>
+          <RefreshCw className={cn("mr-2 size-4", isLoading && "animate-spin")} />
+          Refresh
+        </Button>
+      </div>
 
-        <div className="mt-3 rounded-sm border border-border p-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider">
-            <ShieldCheck className="size-3.5" />
-            Usage Flow
-          </div>
-          <div className="mt-1">
-            Install runtime, create deployment, save policy/config, then start runtime. Runtime
-            health and events are streamed below.
-          </div>
+      {zeroClawStatusMessage && (
+        <div className="mt-4 rounded-md border border-border bg-sidebar px-4 py-2 text-sm text-muted-foreground">
+          {zeroClawStatusMessage}
         </div>
+      )}
 
-        <div className="mt-3 rounded-sm border border-border p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <Bot className="size-3.5" />
-              Deployments
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                disabled={isZeroClawBusy}
-                onClick={() => void installZeroClawRuntime()}
-              >
-                Install Runtime
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                disabled={isZeroClawBusy}
-                onClick={() => void verifyZeroClawRuntime()}
-              >
-                Verify
-              </Button>
-              <select
-                value={selectedUpgradeVersion}
-                onChange={(event) => setSelectedUpgradeVersion(event.target.value)}
-                className="h-8 rounded-sm border border-input bg-background px-2 text-xs"
-                disabled={isZeroClawBusy || (zeroClawStatus?.availableVersions.length || 0) === 0}
-              >
-                {(zeroClawStatus?.availableVersions || []).map((version) => (
-                  <option key={version} value={version}>
-                    {version}
-                    {zeroClawStatus?.activeVersion === version ? " (active)" : ""}
-                  </option>
-                ))}
-                {(zeroClawStatus?.availableVersions || []).length === 0 && (
-                  <option value="">No versions</option>
-                )}
-              </select>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                disabled={isZeroClawBusy || !selectedUpgradeVersion}
-                onClick={() => void upgradeZeroClawRuntime()}
-              >
-                Upgrade
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={startCreateZeroClawDeployment}
-              >
-                <Plus className="mr-1 size-3.5" />
-                New Deployment
-              </Button>
-            </div>
-          </div>
+      {/* Stats row */}
+      <div className="mt-6 flex items-center gap-6 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Runtime:</span>
+          <Badge variant={zeroClawStatus?.state === "installed" ? "info" : "outline"}>
+            {zeroClawStatus?.state || "unknown"}
+          </Badge>
+        </div>
+        {zeroClawStatus?.activeVersion && (
+          <span className="text-muted-foreground">
+            Version:{" "}
+            <span className="font-medium text-foreground">{zeroClawStatus.activeVersion}</span>
+          </span>
+        )}
+        <span className="text-muted-foreground">
+          Deployments:{" "}
+          <span className="font-medium text-foreground">{zeroClawDeployments.length}</span>
+        </span>
+      </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Badge variant={zeroClawStatus?.state === "installed" ? "info" : "outline"}>
-              Runtime: {zeroClawStatus?.state || "unknown"}
-            </Badge>
-            {zeroClawStatus?.activeVersion && (
-              <Badge variant="outline">Active: {zeroClawStatus.activeVersion}</Badge>
-            )}
-            <span>{zeroClawDeployments.length} deployment(s)</span>
-          </div>
+      {/* Runtime controls */}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isZeroClawBusy}
+          onClick={() => void installZeroClawRuntime()}
+        >
+          Install Runtime
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isZeroClawBusy}
+          onClick={() => void verifyZeroClawRuntime()}
+        >
+          Verify
+        </Button>
+        <select
+          value={selectedUpgradeVersion}
+          onChange={(e) => setSelectedUpgradeVersion(e.target.value)}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          disabled={isZeroClawBusy || (zeroClawStatus?.availableVersions.length || 0) === 0}
+        >
+          {(zeroClawStatus?.availableVersions || []).map((version) => (
+            <option key={version} value={version}>
+              {version}
+              {zeroClawStatus?.activeVersion === version ? " (active)" : ""}
+            </option>
+          ))}
+          {(zeroClawStatus?.availableVersions || []).length === 0 && (
+            <option value="">No versions</option>
+          )}
+        </select>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isZeroClawBusy || !selectedUpgradeVersion}
+          onClick={() => void upgradeZeroClawRuntime()}
+        >
+          Upgrade
+        </Button>
+        <Button size="sm" variant="outline" onClick={startCreateZeroClawDeployment}>
+          <Plus className="mr-1 size-4" />
+          New Deployment
+        </Button>
+      </div>
 
-          <div className="mt-2 rounded-sm border border-border bg-background p-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Install Activity
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                <Badge
-                  variant={
-                    zeroClawInstallActivity?.state === "error"
-                      ? "critical"
-                      : zeroClawInstallActivity?.state === "running"
-                        ? "warning"
-                        : zeroClawInstallActivity?.state === "success"
-                          ? "info"
-                          : "outline"
-                  }
-                >
-                  {zeroClawInstallActivity?.state || "idle"}
-                </Badge>
-                {zeroClawInstallActivity?.targetVersion && (
-                  <Badge variant="outline">target {zeroClawInstallActivity.targetVersion}</Badge>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-2 text-[10px]"
-                  onClick={() => void refreshInstallActivity()}
-                  disabled={isZeroClawBusy && zeroClawInstallActivity?.state === "running"}
-                >
-                  Refresh feed
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-2 text-[10px]"
-                  onClick={() => void copyInstallActivityLog()}
-                  disabled={(zeroClawInstallActivity?.lines.length || 0) === 0}
-                >
-                  Copy logs
-                </Button>
-              </div>
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-              <span>phase: {zeroClawInstallActivity?.phase || "idle"}</span>
-              <span>
-                started:{" "}
-                {zeroClawInstallActivity?.startedAt
-                  ? formatDate(zeroClawInstallActivity.startedAt)
-                  : "n/a"}
-              </span>
-              <span>
-                updated:{" "}
-                {zeroClawInstallActivity?.updatedAt
-                  ? formatDate(zeroClawInstallActivity.updatedAt)
-                  : "n/a"}
-              </span>
-              <span>lines: {zeroClawInstallActivity?.lines.length || 0}</span>
-            </div>
-            <div
-              ref={installActivityLogRef}
-              className="mt-2 max-h-44 overflow-auto rounded-sm border border-border bg-background p-2 font-mono text-[10px] text-muted-foreground"
+      <div className="mt-6 space-y-4">
+        {/* Install Activity - collapsible */}
+        <CollapsibleSection
+          title="Install Activity"
+          badge={
+            <Badge
+              variant={
+                zeroClawInstallActivity?.state === "error"
+                  ? "critical"
+                  : zeroClawInstallActivity?.state === "running"
+                    ? "warning"
+                    : zeroClawInstallActivity?.state === "success"
+                      ? "info"
+                      : "outline"
+              }
             >
-              {!zeroClawInstallActivity || zeroClawInstallActivity.lines.length === 0 ? (
-                <div>No install activity yet.</div>
-              ) : (
-                zeroClawInstallActivity.lines.map((line) => (
-                  <div
-                    key={line.id}
-                    className={line.stream === "stderr" ? "text-status-critical" : undefined}
-                  >
-                    [{formatDate(line.occurredAt)}] {line.stream.toUpperCase()} {line.message}
-                  </div>
-                ))
-              )}
-            </div>
-            {zeroClawInstallActivity?.lastError && (
-              <div className="mt-1 text-[11px] text-status-critical">
-                last error: {zeroClawInstallActivity.lastError}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {zeroClawDeployments.map((deployment) => (
-              <button
-                key={deployment.id}
-                onClick={() => selectZeroClawDeployment(deployment.id)}
-                className={`rounded-sm border p-2 text-left text-xs transition-colors ${
-                  selectedZeroClawDeploymentId === deployment.id && !isZeroClawCreatingDeployment
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:bg-background-interactive"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="truncate font-medium">{deployment.name}</div>
-                  <Badge
-                    variant={
-                      deployment.status === "running"
-                        ? "info"
-                        : deployment.status === "error"
-                          ? "critical"
-                          : "outline"
-                    }
-                  >
-                    {deployment.status}
-                  </Badge>
-                </div>
-                <div className="mt-1 truncate text-muted-foreground">{deployment.modelName}</div>
-                <div className="mt-1 truncate text-[11px] text-muted-foreground">
-                  {deployment.workspacePath}
-                </div>
-              </button>
-            ))}
-            {zeroClawDeployments.length === 0 && (
-              <div className="rounded-sm border border-border p-2 text-xs text-muted-foreground">
-                No ZeroClaw deployments configured.
-              </div>
-            )}
-          </div>
-
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Name
-              </label>
-              <Input
-                className="mt-1 h-8 text-xs"
-                value={zeroClawForm.name}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({ ...current, name: event.target.value }))
-                }
-                placeholder="Coding Automator"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Workspace Path
-              </label>
-              <Input
-                className="mt-1 h-8 text-xs"
-                value={zeroClawForm.workspacePath}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({ ...current, workspacePath: event.target.value }))
-                }
-                placeholder="/Users/.../workspace"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Description
-              </label>
-              <textarea
-                value={zeroClawForm.description}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({ ...current, description: event.target.value }))
-                }
-                className="mt-1 h-16 w-full rounded-sm border border-input bg-background px-2 py-1 text-xs"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Model Provider
-              </label>
-              <select
-                value={zeroClawForm.modelProvider}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({
-                    ...current,
-                    modelProvider: event.target
-                      .value as ZeroClawDeploymentFormState["modelProvider"]
-                  }))
-                }
-                className="mt-1 h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
-              >
-                <option value="openai">openai</option>
-                <option value="anthropic">anthropic</option>
-                <option value="google">google</option>
-                <option value="ollama">ollama</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Model
-              </label>
-              <Input
-                className="mt-1 h-8 text-xs"
-                value={zeroClawForm.modelName}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({ ...current, modelName: event.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Policy Mode
-              </label>
-              <select
-                value={zeroClawForm.policyMode}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({
-                    ...current,
-                    policyMode: event.target.value as ZeroClawCapabilityMode
-                  }))
-                }
-                className="mt-1 h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
-              >
-                <option value="global_only">global_only</option>
-                <option value="global_plus_assigned">global_plus_assigned</option>
-                <option value="assigned_only">assigned_only</option>
-                <option value="deny_all_except_assigned">deny_all_except_assigned</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Include Global Skills
-              </label>
-              <label className="mt-1 flex h-8 items-center gap-2 rounded-sm border border-input bg-background px-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={zeroClawForm.includeGlobalSkills}
-                  onChange={(event) =>
-                    setZeroClawForm((current) => ({
-                      ...current,
-                      includeGlobalSkills: event.target.checked
-                    }))
-                  }
-                  className="size-3.5"
-                />
-                Enabled
-              </label>
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Assigned Skills (csv ids)
-              </label>
-              <Input
-                className="mt-1 h-8 text-xs"
-                value={zeroClawForm.assignedSkillIdsCsv}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({
-                    ...current,
-                    assignedSkillIdsCsv: event.target.value
-                  }))
-                }
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Assigned Tools (csv)
-              </label>
-              <Input
-                className="mt-1 h-8 text-xs"
-                value={zeroClawForm.assignedToolNamesCsv}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({
-                    ...current,
-                    assignedToolNamesCsv: event.target.value
-                  }))
-                }
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Assigned Connectors (csv)
-              </label>
-              <Input
-                className="mt-1 h-8 text-xs"
-                value={zeroClawForm.assignedConnectorKeysCsv}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({
-                    ...current,
-                    assignedConnectorKeysCsv: event.target.value
-                  }))
-                }
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Denied Tools (csv)
-              </label>
-              <Input
-                className="mt-1 h-8 text-xs"
-                value={zeroClawForm.deniedToolNamesCsv}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({
-                    ...current,
-                    deniedToolNamesCsv: event.target.value
-                  }))
-                }
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Denied Connectors (csv)
-              </label>
-              <Input
-                className="mt-1 h-8 text-xs"
-                value={zeroClawForm.deniedConnectorKeysCsv}
-                onChange={(event) =>
-                  setZeroClawForm((current) => ({
-                    ...current,
-                    deniedConnectorKeysCsv: event.target.value
-                  }))
-                }
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Desired Runtime
-              </label>
-              <label className="mt-1 flex h-8 items-center gap-2 rounded-sm border border-input bg-background px-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={zeroClawForm.autoStart}
-                  onChange={(event) =>
-                    setZeroClawForm((current) => ({ ...current, autoStart: event.target.checked }))
-                  }
-                  className="size-3.5"
-                />
-                Auto-start / running
-              </label>
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
+              {zeroClawInstallActivity?.state || "idle"}
+            </Badge>
+          }
+        >
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span>Phase: {zeroClawInstallActivity?.phase || "idle"}</span>
+            <span>Lines: {zeroClawInstallActivity?.lines.length || 0}</span>
             <Button
               size="sm"
-              className="h-8 text-xs"
-              disabled={isZeroClawBusy}
-              onClick={() => void saveZeroClawDeployment()}
+              variant="outline"
+              onClick={() => void refreshInstallActivity()}
+              disabled={isZeroClawBusy && zeroClawInstallActivity?.state === "running"}
             >
-              <Save className="mr-1 size-3.5" />
-              {isZeroClawBusy
-                ? "Working..."
-                : isZeroClawCreatingDeployment
-                  ? "Create Deployment"
-                  : "Save Deployment"}
+              Refresh
             </Button>
-            {!isZeroClawCreatingDeployment && selectedZeroClawDeployment && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={isZeroClawBusy}
-                  onClick={() => void runtimeAction("start")}
-                >
-                  <Play className="mr-1 size-3.5" />
-                  Start
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={isZeroClawBusy}
-                  onClick={() => void runtimeAction("stop")}
-                >
-                  <Square className="mr-1 size-3.5" />
-                  Stop
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={isZeroClawBusy}
-                  onClick={() => void runtimeAction("restart")}
-                >
-                  <RotateCcw className="mr-1 size-3.5" />
-                  Restart
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={
-                    isZeroClawBusy ||
-                    !selectedUpgradeVersion ||
-                    selectedUpgradeVersion === selectedZeroClawDeployment.runtimeVersion
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void copyInstallActivityLog()}
+              disabled={(zeroClawInstallActivity?.lines.length || 0) === 0}
+            >
+              Copy Logs
+            </Button>
+          </div>
+          <div
+            ref={installActivityLogRef}
+            className="mt-3 max-h-40 overflow-auto rounded-md border border-border bg-sidebar p-3 font-mono text-xs"
+          >
+            {!zeroClawInstallActivity || zeroClawInstallActivity.lines.length === 0 ? (
+              <div className="text-muted-foreground">No activity yet.</div>
+            ) : (
+              zeroClawInstallActivity.lines.map((line) => (
+                <div
+                  key={line.id}
+                  className={
+                    line.stream === "stderr" ? "text-status-critical" : "text-muted-foreground"
                   }
-                  onClick={() => void applyRuntimeVersionToDeployment()}
                 >
-                  Apply Runtime
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={isZeroClawBusy}
-                  onClick={() => void runZeroClawDoctor()}
-                >
-                  Doctor
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={isZeroClawBusy}
-                  onClick={() => void deleteZeroClawDeployment()}
-                >
-                  <Trash2 className="mr-1 size-3.5" />
-                  Delete
-                </Button>
-              </>
-            )}
-            {isZeroClawCreatingDeployment && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() => {
-                  setIsZeroClawCreatingDeployment(false)
-                  if (zeroClawDeployments.length > 0) {
-                    setSelectedZeroClawDeploymentId(zeroClawDeployments[0].id)
-                  }
-                }}
-              >
-                Cancel
-              </Button>
+                  [{formatDate(line.occurredAt)}] {line.stream.toUpperCase()} {line.message}
+                </div>
+              ))
             )}
           </div>
-
-          {(selectedZeroClawDeployment || isZeroClawCreatingDeployment) && (
-            <div className="mt-3 rounded-sm border border-border bg-background p-2 text-xs">
-              {!isZeroClawCreatingDeployment && selectedZeroClawDeployment && (
-                <div className="grid gap-1 md:grid-cols-2">
-                  <div>Status: {selectedZeroClawDeployment.status}</div>
-                  <div>Desired: {selectedZeroClawDeployment.desiredState}</div>
-                  <div>Runtime: {selectedZeroClawDeployment.runtimeVersion}</div>
-                  <div>Endpoint: {selectedZeroClawDeployment.apiBaseUrl}</div>
-                  <div>
-                    Health:{" "}
-                    {zeroClawHealth
-                      ? `${zeroClawHealth.status}${zeroClawHealth.latencyMs ? ` (${zeroClawHealth.latencyMs}ms)` : ""}`
-                      : "unknown"}
-                  </div>
-                  <div>Last error: {selectedZeroClawDeployment.lastError || "(none)"}</div>
-                  <div>
-                    Effective: {selectedZeroClawDeployment.effectiveCapabilities.skills.length}{" "}
-                    skills, {selectedZeroClawDeployment.effectiveCapabilities.tools.length} tools,{" "}
-                    {selectedZeroClawDeployment.effectiveCapabilities.connectors.length} connectors
-                  </div>
-                  <div>
-                    Gates:{" "}
-                    {Object.entries(selectedZeroClawDeployment.effectiveCapabilities.gates)
-                      .filter(([, enabled]) => enabled)
-                      .map(([gate]) => gate)
-                      .join(", ") || "(none)"}
-                  </div>
-                </div>
-              )}
-              {!isZeroClawCreatingDeployment && selectedZeroClawDeployment && (
-                <div className="mt-2 rounded-sm border border-border p-2">
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Recent Chat Invocations
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                    <Badge variant="outline">{zeroClawInvocationStats.total} events</Badge>
-                    <Badge variant="outline">showing {recentZeroClawInvocations.length}</Badge>
-                    <span>streamed: {zeroClawInvocationStats.streamed}</span>
-                    <span>synthetic fallback: {zeroClawInvocationStats.syntheticFallback}</span>
-                    <span>paired recoveries: {zeroClawInvocationStats.pairedRecoveries}</span>
-                    <span>avg latency: {zeroClawInvocationStats.averageDurationMs}ms</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 px-2 text-[10px]"
-                      onClick={exportInvocationDiagnosticsJson}
-                      disabled={zeroClawInvocations.length === 0}
-                    >
-                      Export JSON
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 px-2 text-[10px]"
-                      onClick={() => void exportDiagnosticsBundleJson()}
-                    >
-                      <Download className="mr-1 size-3" />
-                      Export Bundle
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 px-2 text-[10px]"
-                      onClick={() => void refreshSelectedDeploymentRuntimeData()}
-                    >
-                      Refresh diagnostics
-                    </Button>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={autoRefreshDiagnostics}
-                        onChange={(event) => setAutoRefreshDiagnostics(event.target.checked)}
-                        className="size-3.5"
-                      />
-                      auto refresh
-                    </label>
-                    <span>
-                      last refresh:{" "}
-                      {lastDiagnosticsRefreshAt ? formatDate(lastDiagnosticsRefreshAt) : "not yet"}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                    <label className="flex items-center gap-1">
-                      Transport
-                      <select
-                        value={transportFilter}
-                        onChange={(event) =>
-                          setTransportFilter(
-                            event.target.value as "all" | "sse" | "ndjson" | "json" | "unknown"
-                          )
-                        }
-                        className="h-6 rounded-sm border border-input bg-background px-1 text-[10px]"
-                      >
-                        <option value="all">all</option>
-                        <option value="sse">sse</option>
-                        <option value="ndjson">ndjson</option>
-                        <option value="json">json</option>
-                        <option value="unknown">unknown</option>
-                      </select>
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={fallbackOnly}
-                        onChange={(event) => setFallbackOnly(event.target.checked)}
-                        className="size-3.5"
-                      />
-                      fallback only
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={errorsOnly}
-                        onChange={(event) => setErrorsOnly(event.target.checked)}
-                        className="size-3.5"
-                      />
-                      errors only
-                    </label>
-                    <span>matching: {filteredZeroClawInvocations.length}</span>
-                  </div>
-                  {zeroClawInvocations.length === 0 ? (
-                    <div className="mt-2 text-[11px] text-muted-foreground">
-                      No invocation events yet for this deployment.
-                    </div>
-                  ) : filteredZeroClawInvocations.length === 0 ? (
-                    <div className="mt-2 text-[11px] text-muted-foreground">
-                      No invocations match the current diagnostics filters.
-                    </div>
-                  ) : (
-                    <div className="mt-2 max-h-52 overflow-auto rounded-sm border border-border bg-background p-2 font-mono text-[10px] text-muted-foreground">
-                      {recentZeroClawInvocations.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="flex items-start justify-between gap-2 py-0.5"
-                        >
-                          <div>
-                            [{formatDate(entry.occurredAt)}] thread={entry.threadId.slice(0, 8)}{" "}
-                            model=
-                            {entry.model} transport={entry.transport} duration={entry.durationMs}ms
-                            chunks={entry.tokenChunks} streamed={entry.streamed ? "yes" : "no"}{" "}
-                            fallback=
-                            {entry.syntheticFallbackUsed ? "yes" : "no"} retries=
-                            {entry.attemptCount}
-                            {entry.pairingRecovered ? " paired-recover" : ""}
-                            {entry.hasError ? ` error="${entry.errorMessage || "unknown"}"` : ""}
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-5 px-1.5 text-[10px]"
-                            onClick={() => void openInvocationThread(entry.threadId)}
-                          >
-                            Open
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {!isZeroClawCreatingDeployment && zeroClawEvents.length > 0 && (
-                <div className="mt-2 rounded-sm border border-border p-2 font-mono text-[10px] text-muted-foreground">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span>Runtime log events: {zeroClawEvents.length}</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-5 px-1.5 text-[10px]"
-                      onClick={() => void loadOlderRuntimeEvents()}
-                      disabled={!zeroClawEventsCursor || isZeroClawBusy}
-                    >
-                      Load older
-                    </Button>
-                  </div>
-                  <div className="max-h-40 overflow-auto">
-                    {zeroClawEvents.slice(0, 60).map((event) => (
-                      <div key={event.id}>
-                        [{formatDate(event.occurredAt)}] {event.severity.toUpperCase()}{" "}
-                        {event.eventType}: {event.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {zeroClawDoctorReport && !isZeroClawCreatingDeployment && (
-                <div className="mt-2 rounded-sm border border-border p-2 text-[11px] text-muted-foreground">
-                  <div className="mb-1 uppercase tracking-wider">Doctor Checks</div>
-                  <div className="mb-2">
-                    Last run: {formatDate(zeroClawDoctorReport.generatedAt)} | healthy:{" "}
-                    {zeroClawDoctorReport.healthy ? "yes" : "no"}
-                  </div>
-                  <div className="space-y-1">
-                    {zeroClawDoctorReport.checks.map((check) => (
-                      <div
-                        key={check.id}
-                        className="rounded-sm border border-border bg-background p-1.5"
-                      >
-                        <div>
-                          [{check.ok ? "PASS" : "FAIL"}] {check.label}
-                        </div>
-                        {check.details && <div className="mt-0.5">{check.details}</div>}
-                        {check.repairHint && (
-                          <div className="mt-0.5">repair: {check.repairHint}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+          {zeroClawInstallActivity?.lastError && (
+            <div className="mt-2 text-sm text-status-critical">
+              {zeroClawInstallActivity.lastError}
             </div>
           )}
+        </CollapsibleSection>
 
-          {zeroClawStatusMessage && (
-            <div className="mt-2 text-xs text-status-warning">{zeroClawStatusMessage}</div>
+        {/* Deployments */}
+        <div className="rounded-md border border-border">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Bot className="size-4 text-muted-foreground" />
+              <span className="font-medium">Deployments</span>
+            </div>
+          </div>
+
+          {zeroClawDeployments.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              No deployments configured.
+            </div>
+          ) : (
+            <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
+              {zeroClawDeployments.map((deployment) => (
+                <button
+                  key={deployment.id}
+                  onClick={() => selectZeroClawDeployment(deployment.id)}
+                  className={cn(
+                    "rounded-md border p-3 text-left transition-colors",
+                    selectedZeroClawDeploymentId === deployment.id && !isZeroClawCreatingDeployment
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-medium">{deployment.name}</span>
+                    <Badge
+                      variant={
+                        deployment.status === "running"
+                          ? "info"
+                          : deployment.status === "error"
+                            ? "critical"
+                            : "outline"
+                      }
+                    >
+                      {deployment.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">{deployment.modelName}</div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
+                    {deployment.workspacePath}
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
         </div>
+
+        {/* Deployment Editor */}
+        {(selectedZeroClawDeployment || isZeroClawCreatingDeployment) && (
+          <div className="rounded-md border border-border">
+            <div className="border-b border-border px-4 py-3">
+              <span className="font-medium">
+                {isZeroClawCreatingDeployment ? "New Deployment" : "Deployment Config"}
+              </span>
+            </div>
+
+            <div className="space-y-4 p-4">
+              {/* Basic fields */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="form-group">
+                  <label className="form-label">Name</label>
+                  <Input
+                    value={zeroClawForm.name}
+                    onChange={(e) => setZeroClawForm((c) => ({ ...c, name: e.target.value }))}
+                    placeholder="My Deployment"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Workspace Path</label>
+                  <Input
+                    value={zeroClawForm.workspacePath}
+                    onChange={(e) =>
+                      setZeroClawForm((c) => ({ ...c, workspacePath: e.target.value }))
+                    }
+                    placeholder="/path/to/workspace"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Description</label>
+                <textarea
+                  value={zeroClawForm.description}
+                  onChange={(e) => setZeroClawForm((c) => ({ ...c, description: e.target.value }))}
+                  rows={2}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="form-group">
+                  <label className="form-label">Provider</label>
+                  <select
+                    value={zeroClawForm.modelProvider}
+                    onChange={(e) =>
+                      setZeroClawForm((c) => ({
+                        ...c,
+                        modelProvider: e.target
+                          .value as ZeroClawDeploymentFormState["modelProvider"]
+                      }))
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="openai">openai</option>
+                    <option value="anthropic">anthropic</option>
+                    <option value="google">google</option>
+                    <option value="ollama">ollama</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Model</label>
+                  <Input
+                    value={zeroClawForm.modelName}
+                    onChange={(e) => setZeroClawForm((c) => ({ ...c, modelName: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Runtime</label>
+                  <label className="mt-1 flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={zeroClawForm.autoStart}
+                      onChange={(e) =>
+                        setZeroClawForm((c) => ({ ...c, autoStart: e.target.checked }))
+                      }
+                      className="size-4"
+                    />
+                    Auto-start
+                  </label>
+                </div>
+              </div>
+
+              {/* Advanced policy - collapsible */}
+              <button
+                onClick={() => setShowAdvancedPolicy(!showAdvancedPolicy)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                <ChevronDown
+                  className={cn("size-4 transition-transform", showAdvancedPolicy && "rotate-180")}
+                />
+                Advanced policy
+              </button>
+
+              {showAdvancedPolicy && (
+                <div className="space-y-4 border-t border-border pt-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="form-group">
+                      <label className="form-label">Policy Mode</label>
+                      <select
+                        value={zeroClawForm.policyMode}
+                        onChange={(e) =>
+                          setZeroClawForm((c) => ({
+                            ...c,
+                            policyMode: e.target.value as ZeroClawCapabilityMode
+                          }))
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="global_only">global_only</option>
+                        <option value="global_plus_assigned">global_plus_assigned</option>
+                        <option value="assigned_only">assigned_only</option>
+                        <option value="deny_all_except_assigned">deny_all_except_assigned</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Global Skills</label>
+                      <label className="mt-1 flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={zeroClawForm.includeGlobalSkills}
+                          onChange={(e) =>
+                            setZeroClawForm((c) => ({
+                              ...c,
+                              includeGlobalSkills: e.target.checked
+                            }))
+                          }
+                          className="size-4"
+                        />
+                        Include global skills
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="form-group">
+                      <label className="form-label">Assigned Skills (CSV)</label>
+                      <Input
+                        value={zeroClawForm.assignedSkillIdsCsv}
+                        onChange={(e) =>
+                          setZeroClawForm((c) => ({ ...c, assignedSkillIdsCsv: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Assigned Tools (CSV)</label>
+                      <Input
+                        value={zeroClawForm.assignedToolNamesCsv}
+                        onChange={(e) =>
+                          setZeroClawForm((c) => ({ ...c, assignedToolNamesCsv: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Assigned Connectors (CSV)</label>
+                      <Input
+                        value={zeroClawForm.assignedConnectorKeysCsv}
+                        onChange={(e) =>
+                          setZeroClawForm((c) => ({
+                            ...c,
+                            assignedConnectorKeysCsv: e.target.value
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Denied Tools (CSV)</label>
+                      <Input
+                        value={zeroClawForm.deniedToolNamesCsv}
+                        onChange={(e) =>
+                          setZeroClawForm((c) => ({ ...c, deniedToolNamesCsv: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Denied Connectors (CSV)</label>
+                      <Input
+                        value={zeroClawForm.deniedConnectorKeysCsv}
+                        onChange={(e) =>
+                          setZeroClawForm((c) => ({ ...c, deniedConnectorKeysCsv: e.target.value }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+                <Button disabled={isZeroClawBusy} onClick={() => void saveZeroClawDeployment()}>
+                  <Save className="mr-2 size-4" />
+                  {isZeroClawBusy ? "Saving..." : isZeroClawCreatingDeployment ? "Create" : "Save"}
+                </Button>
+                {!isZeroClawCreatingDeployment && selectedZeroClawDeployment && (
+                  <>
+                    <Button
+                      variant="outline"
+                      disabled={isZeroClawBusy}
+                      onClick={() => void runtimeAction("start")}
+                    >
+                      <Play className="mr-1 size-4" />
+                      Start
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={isZeroClawBusy}
+                      onClick={() => void runtimeAction("stop")}
+                    >
+                      <Square className="mr-1 size-4" />
+                      Stop
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={isZeroClawBusy}
+                      onClick={() => void runtimeAction("restart")}
+                    >
+                      <RotateCcw className="mr-1 size-4" />
+                      Restart
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={
+                        isZeroClawBusy ||
+                        !selectedUpgradeVersion ||
+                        selectedUpgradeVersion === selectedZeroClawDeployment.runtimeVersion
+                      }
+                      onClick={() => void applyRuntimeVersionToDeployment()}
+                    >
+                      Apply Runtime
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={isZeroClawBusy}
+                      onClick={() => void runZeroClawDoctor()}
+                    >
+                      Doctor
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={isZeroClawBusy}
+                      onClick={() => void deleteZeroClawDeployment()}
+                    >
+                      <Trash2 className="mr-1 size-4" />
+                      Delete
+                    </Button>
+                  </>
+                )}
+                {isZeroClawCreatingDeployment && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsZeroClawCreatingDeployment(false)
+                      if (zeroClawDeployments.length > 0) {
+                        setSelectedZeroClawDeploymentId(zeroClawDeployments[0].id)
+                      }
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Deployment Status & Diagnostics - only when deployment is selected */}
+        {!isZeroClawCreatingDeployment && selectedZeroClawDeployment && (
+          <>
+            {/* Status summary */}
+            <div className="rounded-md border border-border p-4">
+              <div className="text-sm font-medium">Deployment Status</div>
+              <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <span className="text-muted-foreground">Status:</span>{" "}
+                  <span className="font-medium">{selectedZeroClawDeployment.status}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Desired:</span>{" "}
+                  {selectedZeroClawDeployment.desiredState}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Runtime:</span>{" "}
+                  {selectedZeroClawDeployment.runtimeVersion}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Health:</span>{" "}
+                  {zeroClawHealth
+                    ? `${zeroClawHealth.status}${zeroClawHealth.latencyMs ? ` (${zeroClawHealth.latencyMs}ms)` : ""}`
+                    : "unknown"}
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-muted-foreground">Endpoint:</span>{" "}
+                  {selectedZeroClawDeployment.apiBaseUrl}
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-muted-foreground">Effective:</span>{" "}
+                  {selectedZeroClawDeployment.effectiveCapabilities.skills.length} skills,{" "}
+                  {selectedZeroClawDeployment.effectiveCapabilities.tools.length} tools,{" "}
+                  {selectedZeroClawDeployment.effectiveCapabilities.connectors.length} connectors
+                </div>
+                {selectedZeroClawDeployment.lastError && (
+                  <div className="sm:col-span-4 text-status-critical">
+                    Error: {selectedZeroClawDeployment.lastError}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Invocation Diagnostics - collapsible */}
+            <CollapsibleSection
+              title="Invocation Diagnostics"
+              badge={
+                <span className="text-xs text-muted-foreground">
+                  {zeroClawInvocationStats.total} events
+                </span>
+              }
+            >
+              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                <span>Streamed: {zeroClawInvocationStats.streamed}</span>
+                <span>Fallback: {zeroClawInvocationStats.syntheticFallback}</span>
+                <span>Recoveries: {zeroClawInvocationStats.pairedRecoveries}</span>
+                <span>Avg latency: {zeroClawInvocationStats.averageDurationMs}ms</span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={exportInvocationDiagnosticsJson}
+                  disabled={zeroClawInvocations.length === 0}
+                >
+                  Export JSON
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void exportDiagnosticsBundleJson()}
+                >
+                  <Download className="mr-1 size-4" />
+                  Export Bundle
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void refreshSelectedDeploymentRuntimeData()}
+                >
+                  Refresh
+                </Button>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={autoRefreshDiagnostics}
+                    onChange={(e) => setAutoRefreshDiagnostics(e.target.checked)}
+                    className="size-4"
+                  />
+                  Auto-refresh
+                </label>
+                {lastDiagnosticsRefreshAt && (
+                  <span className="text-xs">Last: {formatDate(lastDiagnosticsRefreshAt)}</span>
+                )}
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <label className="flex items-center gap-2">
+                  Transport:
+                  <select
+                    value={transportFilter}
+                    onChange={(e) =>
+                      setTransportFilter(
+                        e.target.value as "all" | "sse" | "ndjson" | "json" | "unknown"
+                      )
+                    }
+                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="all">all</option>
+                    <option value="sse">sse</option>
+                    <option value="ndjson">ndjson</option>
+                    <option value="json">json</option>
+                    <option value="unknown">unknown</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={fallbackOnly}
+                    onChange={(e) => setFallbackOnly(e.target.checked)}
+                    className="size-4"
+                  />
+                  Fallback only
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={errorsOnly}
+                    onChange={(e) => setErrorsOnly(e.target.checked)}
+                    className="size-4"
+                  />
+                  Errors only
+                </label>
+                <span className="text-muted-foreground">
+                  Showing: {recentZeroClawInvocations.length} / {filteredZeroClawInvocations.length}
+                </span>
+              </div>
+
+              {zeroClawInvocations.length === 0 ? (
+                <p className="mt-3 text-sm text-muted-foreground">No invocations yet.</p>
+              ) : filteredZeroClawInvocations.length === 0 ? (
+                <p className="mt-3 text-sm text-muted-foreground">No matches for filters.</p>
+              ) : (
+                <div className="mt-3 max-h-48 overflow-auto rounded-md border border-border bg-sidebar p-3 font-mono text-xs">
+                  {recentZeroClawInvocations.map((entry) => (
+                    <div key={entry.id} className="flex items-start justify-between gap-2 py-0.5">
+                      <div
+                        className={
+                          entry.hasError ? "text-status-critical" : "text-muted-foreground"
+                        }
+                      >
+                        [{formatDate(entry.occurredAt)}] thread={entry.threadId.slice(0, 8)} model=
+                        {entry.model} transport={entry.transport} duration={entry.durationMs}ms
+                        {entry.hasError && ` error="${entry.errorMessage || "unknown"}"`}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-5 px-2 text-xs"
+                        onClick={() => void openInvocationThread(entry.threadId)}
+                      >
+                        Open
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
+
+            {/* Runtime Events - collapsible */}
+            {zeroClawEvents.length > 0 && (
+              <CollapsibleSection
+                title="Runtime Events"
+                badge={
+                  <span className="text-xs text-muted-foreground">
+                    {zeroClawEvents.length} events
+                  </span>
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void loadOlderRuntimeEvents()}
+                    disabled={!zeroClawEventsCursor || isZeroClawBusy}
+                  >
+                    Load older
+                  </Button>
+                </div>
+                <div className="mt-3 max-h-40 overflow-auto rounded-md border border-border bg-sidebar p-3 font-mono text-xs text-muted-foreground">
+                  {zeroClawEvents.slice(0, 60).map((event) => (
+                    <div key={event.id}>
+                      [{formatDate(event.occurredAt)}] {event.severity.toUpperCase()}{" "}
+                      {event.eventType}: {event.message}
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {/* Doctor Report - collapsible */}
+            {zeroClawDoctorReport && (
+              <CollapsibleSection
+                title="Doctor Report"
+                badge={
+                  <Badge variant={zeroClawDoctorReport.healthy ? "info" : "critical"}>
+                    {zeroClawDoctorReport.healthy ? "Healthy" : "Issues"}
+                  </Badge>
+                }
+                defaultOpen
+              >
+                <p className="text-sm text-muted-foreground">
+                  Last run: {formatDate(zeroClawDoctorReport.generatedAt)}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {zeroClawDoctorReport.checks.map((check) => (
+                    <div key={check.id} className="rounded-md border border-border p-3">
+                      <div className="flex items-center gap-2">
+                        <span className={check.ok ? "text-green-500" : "text-status-critical"}>
+                          [{check.ok ? "PASS" : "FAIL"}]
+                        </span>
+                        <span className="font-medium">{check.label}</span>
+                      </div>
+                      {check.details && (
+                        <p className="mt-1 text-sm text-muted-foreground">{check.details}</p>
+                      )}
+                      {check.repairHint && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Repair: {check.repairHint}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleSection>
+            )}
+          </>
+        )}
       </div>
     </section>
   )

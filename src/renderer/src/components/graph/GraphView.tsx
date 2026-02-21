@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Bot, Link2, Network, Play, RotateCcw, UserRound } from "lucide-react"
+import { Bot, Eye, EyeOff, Network, Play, RotateCcw, UserRound } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/lib/store"
@@ -36,9 +36,7 @@ function clampPosition(value: number): number {
 }
 
 function intersectCount(left: string[], right: string[]): number {
-  if (left.length === 0 || right.length === 0) {
-    return 0
-  }
+  if (left.length === 0 || right.length === 0) return 0
   const rightSet = new Set(right)
   return left.filter((entry) => rightSet.has(entry)).length
 }
@@ -71,71 +69,6 @@ function buildGraphNodes(agents: AgentDefinition[]): GraphNode[] {
       y: centerY + radius * Math.sin(angle),
       agent,
       isOrchestrator: false
-    })
-  })
-
-  return nodes
-}
-
-function getAgentDepartment(agent: AgentDefinition): string {
-  const primaryTag = (agent.tags[0] || "").trim()
-  if (primaryTag.length > 0) {
-    return primaryTag
-  }
-  return "general"
-}
-
-function buildDepartmentGroupedNodes(agents: AgentDefinition[]): GraphNode[] {
-  const orchestrator = agents.find((agent) => agent.isOrchestrator)
-  const specialists = agents.filter((agent) => !agent.isOrchestrator)
-  const byDepartment = new Map<string, AgentDefinition[]>()
-
-  for (const agent of specialists) {
-    const department = getAgentDepartment(agent)
-    const entries = byDepartment.get(department) || []
-    entries.push(agent)
-    byDepartment.set(department, entries)
-  }
-
-  const departments = Array.from(byDepartment.entries()).sort((left, right) =>
-    left[0].localeCompare(right[0])
-  )
-
-  const nodes: GraphNode[] = []
-  if (orchestrator) {
-    nodes.push({
-      id: orchestrator.id,
-      x: 50,
-      y: 16,
-      agent: orchestrator,
-      isOrchestrator: true
-    })
-  }
-
-  if (departments.length === 0) {
-    if (!orchestrator) {
-      return buildGraphNodes(agents)
-    }
-    return nodes
-  }
-
-  departments.forEach(([, departmentAgents], departmentIndex) => {
-    const departmentCount = departments.length
-    const x =
-      departmentCount === 1
-        ? 50
-        : 12 + (departmentIndex * (100 - 24)) / Math.max(1, departmentCount - 1)
-
-    departmentAgents.forEach((agent, index) => {
-      const rowCount = departmentAgents.length
-      const y = rowCount === 1 ? 56 : 34 + (index * (100 - 44)) / Math.max(1, rowCount - 1)
-      nodes.push({
-        id: agent.id,
-        x: clampPosition(x),
-        y: clampPosition(y),
-        agent,
-        isOrchestrator: false
-      })
     })
   })
 
@@ -179,7 +112,7 @@ function buildGraphEdges(
             sourceId: left.id,
             targetId: right.id,
             type: "tools",
-            label: `shared tools (${sharedCapabilities})`
+            label: `${sharedCapabilities} shared`
           })
         }
       }
@@ -190,7 +123,7 @@ function buildGraphEdges(
           sourceId: left.id,
           targetId: right.id,
           type: "memory",
-          label: "shared memory"
+          label: "memory"
         })
       }
     }
@@ -206,12 +139,10 @@ function normalizeKey(value: string | undefined): string {
 function matchSubagentToAgent(subagent: Subagent, agents: AgentDefinition[]): string | null {
   const subagentName = normalizeKey(subagent.name)
   const subagentType = normalizeKey(subagent.subagentType)
-
   const match = agents.find((agent) => {
     const agentKey = normalizeKey(agent.name)
     return agentKey.length > 0 && (agentKey === subagentName || agentKey === subagentType)
   })
-
   return match?.id || null
 }
 
@@ -225,9 +156,7 @@ function reduceDelegationStatus(
     failed: 2,
     running: 3
   }
-  if (!previous) {
-    return next
-  }
+  if (!previous) return next
   return rank[next] >= rank[previous] ? next : previous
 }
 
@@ -237,9 +166,9 @@ export function GraphView(): React.JSX.Element {
   const threadState = useThreadState(currentThreadId)
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
-  const [showToolEdges, setShowToolEdges] = useState(true)
-  const [showMemoryEdges, setShowMemoryEdges] = useState(true)
-  const [groupByDepartment, setGroupByDepartment] = useState(false)
+  const [showToolEdges, setShowToolEdges] = useState(false) // Default OFF - cleaner
+  const [showMemoryEdges, setShowMemoryEdges] = useState(false) // Default OFF
+  const [showEdgeLabels, setShowEdgeLabels] = useState(false) // NEW: hide labels by default
   const [simulationEnabled, setSimulationEnabled] = useState(false)
   const [simulationTick, setSimulationTick] = useState(0)
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
@@ -257,7 +186,6 @@ export function GraphView(): React.JSX.Element {
 
   useEffect(() => {
     let cancelled = false
-
     async function loadLayout(): Promise<void> {
       try {
         const rows = await window.api.graph.getLayout(workspaceId)
@@ -269,12 +197,9 @@ export function GraphView(): React.JSX.Element {
         setWorkspaceLayout(next)
       } catch (error) {
         console.warn("[GraphView] Failed to load graph layout.", error)
-        if (!cancelled) {
-          setWorkspaceLayout({})
-        }
+        if (!cancelled) setWorkspaceLayout({})
       }
     }
-
     loadLayout()
     return () => {
       cancelled = true
@@ -286,52 +211,32 @@ export function GraphView(): React.JSX.Element {
       setTimelineEvents([])
       return
     }
-
     let cancelled = false
     let timer: ReturnType<typeof setInterval> | null = null
-
     const loadTimeline = async () => {
       try {
         const events = await window.api.timeline.list(currentThreadId, 400)
-        if (!cancelled) {
-          setTimelineEvents(events)
-        }
+        if (!cancelled) setTimelineEvents(events)
       } catch (error) {
         console.warn("[GraphView] Failed to load timeline events.", error)
       }
     }
-
     loadTimeline()
     timer = setInterval(loadTimeline, 1500)
-
     return () => {
       cancelled = true
-      if (timer) {
-        clearInterval(timer)
-      }
+      if (timer) clearInterval(timer)
     }
   }, [currentThreadId])
 
-  const rawGraphNodes = useMemo(
-    () => (groupByDepartment ? buildDepartmentGroupedNodes(agents) : buildGraphNodes(agents)),
-    [agents, groupByDepartment]
-  )
+  const rawGraphNodes = useMemo(() => buildGraphNodes(agents), [agents])
   const graphNodes = useMemo(() => {
-    if (groupByDepartment) {
-      return rawGraphNodes
-    }
     return rawGraphNodes.map((node) => {
       const saved = workspaceLayout[node.id]
-      if (!saved) {
-        return node
-      }
-      return {
-        ...node,
-        x: clampPosition(saved.x),
-        y: clampPosition(saved.y)
-      }
+      if (!saved) return node
+      return { ...node, x: clampPosition(saved.x), y: clampPosition(saved.y) }
     })
-  }, [groupByDepartment, rawGraphNodes, workspaceLayout])
+  }, [rawGraphNodes, workspaceLayout])
 
   const graphEdges = useMemo(
     () => buildGraphEdges(agents, showToolEdges, showMemoryEdges),
@@ -339,21 +244,15 @@ export function GraphView(): React.JSX.Element {
   )
 
   useEffect(() => {
-    if (!simulationEnabled || graphEdges.length === 0) {
-      return
-    }
-
+    if (!simulationEnabled || graphEdges.length === 0) return
     const timer = window.setInterval(() => {
       setSimulationTick((prev) => prev + 1)
     }, 700)
-
     return () => window.clearInterval(timer)
   }, [graphEdges.length, simulationEnabled])
 
   const selectedAgentIdResolved = useMemo(() => {
-    if (graphNodes.length === 0) {
-      return null
-    }
+    if (graphNodes.length === 0) return null
     if (selectedAgentId && graphNodes.some((node) => node.id === selectedAgentId)) {
       return selectedAgentId
     }
@@ -365,18 +264,12 @@ export function GraphView(): React.JSX.Element {
   const activeDelegationStatus = useMemo(() => {
     const statusMap = new Map<string, DelegationPlaybackStatus>()
     const orchestrator = agents.find((agent) => agent.isOrchestrator)
-    if (!orchestrator) {
-      return statusMap
-    }
+    if (!orchestrator) return statusMap
 
     for (const event of timelineEvents) {
-      if (!event.targetAgentId || event.targetAgentId === orchestrator.id) {
+      if (!event.targetAgentId || event.targetAgentId === orchestrator.id) continue
+      if (event.eventType !== "subagent_started" && event.eventType !== "subagent_completed")
         continue
-      }
-      if (event.eventType !== "subagent_started" && event.eventType !== "subagent_completed") {
-        continue
-      }
-
       const edgeId = `delegation-${orchestrator.id}-${event.targetAgentId}`
       const mappedStatus: DelegationPlaybackStatus =
         event.eventType === "subagent_started" ? "running" : "completed"
@@ -385,20 +278,12 @@ export function GraphView(): React.JSX.Element {
 
     for (const subagent of runSubagents) {
       const targetAgentId = matchSubagentToAgent(subagent, agents)
-      if (!targetAgentId || targetAgentId === orchestrator.id) {
-        continue
-      }
-
+      if (!targetAgentId || targetAgentId === orchestrator.id) continue
       const edgeId = `delegation-${orchestrator.id}-${targetAgentId}`
       let mappedStatus: DelegationPlaybackStatus = "pending"
-      if (subagent.status === "running") {
-        mappedStatus = "running"
-      } else if (subagent.status === "completed") {
-        mappedStatus = "completed"
-      } else if (subagent.status === "failed") {
-        mappedStatus = "failed"
-      }
-
+      if (subagent.status === "running") mappedStatus = "running"
+      else if (subagent.status === "completed") mappedStatus = "completed"
+      else if (subagent.status === "failed") mappedStatus = "failed"
       statusMap.set(edgeId, reduceDelegationStatus(statusMap.get(edgeId), mappedStatus))
     }
 
@@ -415,10 +300,7 @@ export function GraphView(): React.JSX.Element {
   const setNodePosition = useCallback((nodeId: string, x: number, y: number) => {
     setWorkspaceLayout((previous) => ({
       ...previous,
-      [nodeId]: {
-        x: clampPosition(x),
-        y: clampPosition(y)
-      }
+      [nodeId]: { x: clampPosition(x), y: clampPosition(y) }
     }))
   }, [])
 
@@ -442,13 +324,9 @@ export function GraphView(): React.JSX.Element {
 
   const startNodeDrag = useCallback(
     (nodeId: string, event: React.MouseEvent<HTMLButtonElement>) => {
-      if (event.button !== 0) {
-        return
-      }
+      if (event.button !== 0) return
       const container = graphCanvasRef.current
-      if (!container) {
-        return
-      }
+      if (!container) return
 
       event.preventDefault()
       setDraggingNodeId(nodeId)
@@ -456,10 +334,7 @@ export function GraphView(): React.JSX.Element {
 
       const updateFromClientPoint = (clientX: number, clientY: number) => {
         const rect = container.getBoundingClientRect()
-        if (rect.width <= 0 || rect.height <= 0) {
-          return
-        }
-
+        if (rect.width <= 0 || rect.height <= 0) return
         const x = ((clientX - rect.left) / rect.width) * 100
         const y = ((clientY - rect.top) / rect.height) * 100
         latestPosition.x = x
@@ -486,7 +361,7 @@ export function GraphView(): React.JSX.Element {
     [persistNodePosition, setNodePosition]
   )
 
-  const runningDelegations = runSubagents.filter((subagent) => subagent.status === "running").length
+  const runningDelegations = runSubagents.filter((s) => s.status === "running").length
 
   const openChatFromNode = useCallback(
     async (agent: AgentDefinition, asOrchestrator: boolean) => {
@@ -515,12 +390,10 @@ export function GraphView(): React.JSX.Element {
   if (agents.length === 0) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
-        <div className="text-center text-muted-foreground">
-          <Network className="mx-auto mb-3 size-8 opacity-60" />
-          <p className="text-sm">No agents available for graph view.</p>
-          <p className="mt-1 text-xs">
-            Create agents first, then return to run topology simulations.
-          </p>
+        <div className="empty-state">
+          <Network className="empty-state-icon" />
+          <p className="text-sm text-muted-foreground">No agents available</p>
+          <p className="mt-1 text-xs text-muted-foreground/60">Create agents first</p>
         </div>
       </div>
     )
@@ -528,10 +401,12 @@ export function GraphView(): React.JSX.Element {
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      <div ref={graphCanvasRef} className="relative flex-1 border-r border-border">
-        <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-sm border border-border bg-background/90 p-2 backdrop-blur">
+      {/* Graph Canvas */}
+      <div ref={graphCanvasRef} className="relative flex-1 border-r border-border/50">
+        {/* Controls - minimalist */}
+        <div className="absolute left-4 top-4 z-20 flex items-center gap-1.5 rounded-lg border border-border/40 bg-background/95 p-1.5 backdrop-blur">
           <Button
-            variant={simulationEnabled ? "default" : "outline"}
+            variant={simulationEnabled ? "default" : "ghost"}
             size="sm"
             className="h-7 gap-1.5 px-2 text-xs"
             onClick={() => {
@@ -539,50 +414,52 @@ export function GraphView(): React.JSX.Element {
               setSimulationEnabled((prev) => !prev)
             }}
           >
-            <Play className="size-3.5" />
-            {simulationEnabled ? "Running" : "Run simulation"}
+            <Play className="size-3" />
+            {simulationEnabled ? "Stop" : "Simulate"}
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
-            className="h-7 gap-1.5 px-2 text-xs"
+            className="h-7 px-2 text-xs"
             onClick={clearWorkspaceLayout}
           >
-            <RotateCcw className="size-3.5" />
-            Reset layout
+            <RotateCcw className="size-3" />
           </Button>
+          <div className="h-4 w-px bg-border/50" />
           <Button
-            variant={groupByDepartment ? "default" : "outline"}
+            variant={showToolEdges ? "default" : "ghost"}
             size="sm"
-            className="h-7 gap-1.5 px-2 text-xs"
-            onClick={() => setGroupByDepartment((prev) => !prev)}
-          >
-            <Network className="size-3.5" />
-            Group by Dept
-          </Button>
-          <Button
-            variant={showToolEdges ? "default" : "outline"}
-            size="sm"
-            className="h-7 gap-1.5 px-2 text-xs"
+            className="h-7 px-2 text-xs"
             onClick={() => setShowToolEdges((prev) => !prev)}
           >
-            <Link2 className="size-3.5" />
             Tools
           </Button>
           <Button
-            variant={showMemoryEdges ? "default" : "outline"}
+            variant={showMemoryEdges ? "default" : "ghost"}
             size="sm"
-            className="h-7 gap-1.5 px-2 text-xs"
+            className="h-7 px-2 text-xs"
             onClick={() => setShowMemoryEdges((prev) => !prev)}
           >
-            <Network className="size-3.5" />
             Memory
           </Button>
+          <div className="h-4 w-px bg-border/50" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setShowEdgeLabels((prev) => !prev)}
+          >
+            {showEdgeLabels ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+            <span className="ml-1">Labels</span>
+          </Button>
           {runningDelegations > 0 && !simulationEnabled && (
-            <Badge variant="info">{runningDelegations} live delegation</Badge>
+            <Badge variant="info" className="ml-2 text-[10px]">
+              {runningDelegations} live
+            </Badge>
           )}
         </div>
 
+        {/* SVG Edges */}
         <svg
           className="absolute inset-0 h-full w-full"
           viewBox="0 0 100 100"
@@ -591,9 +468,7 @@ export function GraphView(): React.JSX.Element {
           {graphEdges.map((edge) => {
             const source = graphNodes.find((node) => node.id === edge.sourceId)
             const target = graphNodes.find((node) => node.id === edge.targetId)
-            if (!source || !target) {
-              return null
-            }
+            if (!source || !target) return null
 
             const playbackStatus = activeDelegationStatus.get(edge.id)
             const isSimulated = simulatedEdgeId === edge.id
@@ -606,16 +481,13 @@ export function GraphView(): React.JSX.Element {
                 if (playbackStatus === "failed") return "stroke-status-critical"
                 return "stroke-status-warning"
               }
-              if (edge.type === "delegation") return "stroke-status-info"
-              if (edge.type === "tools") return "stroke-status-warning"
-              return "stroke-status-nominal"
+              if (edge.type === "delegation") return "stroke-muted-foreground/40"
+              if (edge.type === "tools") return "stroke-status-warning/30"
+              return "stroke-status-nominal/30"
             })()
 
             const dashArray =
-              edge.type === "delegation" ? undefined : edge.type === "tools" ? "3 2" : "1 2"
-            const midX = (source.x + target.x) / 2
-            const midY = (source.y + target.y) / 2
-            const label = playbackStatus ? `${edge.label} • ${playbackStatus}` : edge.label
+              edge.type === "delegation" ? undefined : edge.type === "tools" ? "2 2" : "1 2"
 
             return (
               <g key={edge.id}>
@@ -624,31 +496,32 @@ export function GraphView(): React.JSX.Element {
                   y1={source.y}
                   x2={target.x}
                   y2={target.y}
-                  strokeWidth={isSimulated || isPlayback ? 0.75 : 0.35}
+                  strokeWidth={isSimulated || isPlayback ? 0.5 : 0.2}
                   strokeDasharray={dashArray}
                   className={cn(
                     strokeClass,
                     isSimulated && "opacity-100",
                     isPlayback && "opacity-100",
-                    !isSimulated && !isPlayback && "opacity-65"
+                    !isSimulated && !isPlayback && "opacity-60"
                   )}
                 />
-                <text
-                  x={midX}
-                  y={midY}
-                  textAnchor="middle"
-                  className={cn(
-                    "fill-muted-foreground text-[1.8px]",
-                    (isSimulated || isPlayback) && "fill-foreground"
-                  )}
-                >
-                  {label}
-                </text>
+                {/* Only show labels when enabled */}
+                {showEdgeLabels && (
+                  <text
+                    x={(source.x + target.x) / 2}
+                    y={(source.y + target.y) / 2}
+                    textAnchor="middle"
+                    className="fill-muted-foreground/50 text-[1.2px]"
+                  >
+                    {edge.label}
+                  </text>
+                )}
               </g>
             )
           })}
         </svg>
 
+        {/* Node Cards - cleaner design */}
         {graphNodes.map((node) => {
           const isSelected = node.id === selectedAgentIdResolved
           const isDragging = draggingNodeId === node.id
@@ -657,126 +530,101 @@ export function GraphView(): React.JSX.Element {
             <button
               key={node.id}
               className={cn(
-                "absolute -translate-x-1/2 -translate-y-1/2 rounded-sm border px-3 py-2 text-left transition-all",
+                "absolute -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card/90 px-3 py-2 text-left backdrop-blur transition-all",
                 isSelected
-                  ? "border-primary bg-primary/10 shadow-lg"
-                  : "border-border bg-sidebar hover:bg-sidebar-accent/60",
+                  ? "border-primary/50 shadow-lg shadow-primary/10"
+                  : "border-border/40 hover:border-border hover:shadow-md",
                 isDragging && "cursor-grabbing",
-                node.isOrchestrator ? "w-44" : "w-40"
+                node.isOrchestrator ? "w-36" : "w-32"
               )}
               style={{ left: `${node.x}%`, top: `${node.y}%` }}
               onClick={() => setSelectedAgentId(node.id)}
-              onMouseDown={(event) => {
-                if (!groupByDepartment) {
-                  startNodeDrag(node.id, event)
-                }
-              }}
+              onMouseDown={(event) => startNodeDrag(node.id, event)}
             >
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+              <div className="flex items-center gap-1.5">
                 {node.isOrchestrator ? (
-                  <Bot className="size-3.5 text-status-info" />
+                  <Bot className="size-3 text-primary" />
                 ) : (
-                  <UserRound className="size-3.5 text-status-warning" />
+                  <UserRound className="size-3 text-muted-foreground" />
                 )}
-                {node.isOrchestrator ? "Orchestrator" : "Specialist"}
+                <span className="truncate text-xs font-medium">{node.agent.name}</span>
               </div>
-              <div className="mt-1 truncate text-sm font-medium">{node.agent.name}</div>
-              <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+              <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">
                 {node.agent.role}
-              </div>
-              <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                {getAgentDepartment(node.agent)}
-              </div>
+              </p>
             </button>
           )
         })}
       </div>
 
-      <aside className="flex w-[320px] flex-col overflow-auto bg-sidebar">
-        <div className="border-b border-border px-4 py-3">
-          <div className="text-section-header">NODE INSPECTOR</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {graphNodes.length} agents, {graphEdges.length} visible edges
-          </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            Layout autosaves per workspace ({workspaceId}).
-          </div>
+      {/* Inspector Panel - cleaner */}
+      <aside className="flex w-72 flex-col overflow-auto bg-sidebar/50">
+        <div className="border-b border-border/30 px-4 py-3">
+          <p className="text-xs font-medium text-muted-foreground">Inspector</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground/60">
+            {graphNodes.length} agents, {graphEdges.length} edges
+          </p>
         </div>
 
         {selectedNode ? (
-          <div className="space-y-4 p-4">
+          <div className="flex-1 space-y-4 p-4">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold">{selectedNode.agent.name}</h3>
-                {selectedNode.isOrchestrator ? <Badge variant="info">Orchestrator</Badge> : null}
-                {selectedNode.agent.memoryScope === "shared" ? (
-                  <Badge variant="nominal">Shared memory</Badge>
-                ) : (
-                  <Badge variant="outline">Private memory</Badge>
+                <h3 className="text-sm font-medium">{selectedNode.agent.name}</h3>
+                {selectedNode.isOrchestrator && (
+                  <Badge variant="info" className="text-[9px]">
+                    Orchestrator
+                  </Badge>
                 )}
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">{selectedNode.agent.role}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{selectedNode.agent.role}</p>
             </div>
 
             <div>
-              <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Model
-              </div>
-              <div className="text-xs">{selectedNode.agent.modelName}</div>
+              </p>
+              <p className="mt-0.5 text-xs">{selectedNode.agent.modelName}</p>
             </div>
 
-            <div>
-              <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                Tools Allowlist
-              </div>
-              {selectedNode.agent.toolAllowlist.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {selectedNode.agent.toolAllowlist.map((tool) => (
-                    <Badge key={tool} variant="outline" className="text-[10px]">
+            {selectedNode.agent.toolAllowlist.length > 0 && (
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Tools
+                </p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {selectedNode.agent.toolAllowlist.slice(0, 4).map((tool) => (
+                    <Badge key={tool} variant="outline" className="text-[9px]">
                       {tool}
                     </Badge>
                   ))}
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">
-                  No explicit allowlist configured.
-                </div>
-              )}
-            </div>
-
-            <div>
-              <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                Connectors
-              </div>
-              {selectedNode.agent.connectorAllowlist.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {selectedNode.agent.connectorAllowlist.map((connector) => (
-                    <Badge key={connector} variant="outline" className="text-[10px]">
-                      {connector}
+                  {selectedNode.agent.toolAllowlist.length > 4 && (
+                    <Badge variant="outline" className="text-[9px]">
+                      +{selectedNode.agent.toolAllowlist.length - 4}
                     </Badge>
-                  ))}
+                  )}
                 </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">No connectors configured.</div>
-              )}
-            </div>
+              </div>
+            )}
 
-            <Button size="sm" className="w-full" onClick={() => setShowAgentsView(true)}>
-              Open Agent Configuration
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full"
-              disabled={isOpeningChat}
-              onClick={() => openChatFromNode(selectedNode.agent, selectedNode.isOrchestrator)}
-            >
-              {selectedNode.isOrchestrator ? "Open Orchestrator Chat" : "Open Direct Chat"}
-            </Button>
+            <div className="space-y-2 pt-2">
+              <Button size="sm" className="w-full" onClick={() => setShowAgentsView(true)}>
+                Configure
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                disabled={isOpeningChat}
+                onClick={() => openChatFromNode(selectedNode.agent, selectedNode.isOrchestrator)}
+              >
+                {selectedNode.isOrchestrator ? "Chat" : "Direct Chat"}
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="p-4 text-xs text-muted-foreground">
-            Select a node to inspect agent details.
+          <div className="flex flex-1 items-center justify-center p-4">
+            <p className="text-xs text-muted-foreground">Select a node</p>
           </div>
         )}
       </aside>

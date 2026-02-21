@@ -106,7 +106,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   rightPanelTab: "todos",
   settingsOpen: false,
   sidebarCollapsed: false,
-  showKanbanView: false,
+  showKanbanView: true,
   showSubagentsInKanban: true,
   showAgentsView: false,
   showGraphView: false,
@@ -124,8 +124,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const threads = await window.api.threads.list()
     set({ threads })
 
-    // Select first thread if none selected
-    if (!get().currentThreadId && threads.length > 0) {
+    // Select a default thread only when the user is not on the Home view.
+    if (!get().showKanbanView && !get().currentThreadId && threads.length > 0) {
       await get().selectThread(threads[0].thread_id)
     }
   },

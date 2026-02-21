@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
+  ChevronDown,
   FlaskConical,
   Plus,
   RefreshCw,
@@ -12,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import type {
   ConnectorDefinition,
   McpServerDefinition,
@@ -50,27 +52,17 @@ const TOOL_IMPLEMENTATION_OPTIONS: Array<ToolDefinition["implementationType"]> =
 ]
 
 function getRiskBadgeVariant(riskTier: number): "outline" | "info" | "warning" | "critical" {
-  if (riskTier >= 3) {
-    return "critical"
-  }
-  if (riskTier >= 2) {
-    return "warning"
-  }
-  if (riskTier >= 1) {
-    return "info"
-  }
+  if (riskTier >= 3) return "critical"
+  if (riskTier >= 2) return "warning"
+  if (riskTier >= 1) return "info"
   return "outline"
 }
 
 function getStatusBadgeVariant(
   status: McpServerDefinition["status"] | ConnectorDefinition["status"]
 ): "outline" | "info" | "warning" | "critical" {
-  if (status === "running" || status === "connected") {
-    return "info"
-  }
-  if (status === "error") {
-    return "critical"
-  }
+  if (status === "running" || status === "connected") return "info"
+  if (status === "error") return "critical"
   return "outline"
 }
 
@@ -112,22 +104,52 @@ function normalizeToolName(value: string): string {
 
 function formatDate(value: Date | string): string {
   const parsed = value instanceof Date ? value : new Date(value)
-  if (!Number.isFinite(parsed.getTime())) {
-    return "Unknown"
-  }
+  if (!Number.isFinite(parsed.getTime())) return "Unknown"
   return parsed.toLocaleString()
 }
 
 function parseToolConfig(configJson: string): Record<string, unknown> {
   const raw = configJson.trim()
-  if (!raw) {
-    return {}
-  }
+  if (!raw) return {}
   const parsed = JSON.parse(raw) as unknown
-  if (!isRecord(parsed)) {
-    throw new Error("Config must be a JSON object.")
-  }
+  if (!isRecord(parsed)) throw new Error("Config must be a JSON object.")
   return parsed
+}
+
+// Collapsible section component
+function CollapsibleSection({
+  title,
+  icon: Icon,
+  defaultOpen = false,
+  count,
+  children
+}: {
+  title: string
+  icon: React.ComponentType<{ className?: string }>
+  defaultOpen?: boolean
+  count?: number
+  children: React.ReactNode
+}): React.JSX.Element {
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <div className="rounded-md border border-border">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-background-interactive"
+      >
+        <div className="flex items-center gap-2">
+          <Icon className="size-4 text-muted-foreground" />
+          <span className="text-sm font-medium">{title}</span>
+          {count !== undefined && <span className="text-xs text-muted-foreground">({count})</span>}
+        </div>
+        <ChevronDown
+          className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && <div className="border-t border-border px-4 py-3">{children}</div>}
+    </div>
+  )
 }
 
 export function ToolsView(): React.JSX.Element {
@@ -152,26 +174,16 @@ export function ToolsView(): React.JSX.Element {
   const [selectedToolNameForTest, setSelectedToolNameForTest] = useState("")
   const [testArgsJson, setTestArgsJson] = useState("{}")
   const [testConsoleOutput, setTestConsoleOutput] = useState<string | null>(null)
+  const [showAdvancedConfig, setShowAdvancedConfig] = useState(false)
 
   const selectedTool = useMemo(
     () => tools.find((entry) => entry.id === selectedToolId) || null,
     [selectedToolId, tools]
   )
   const filteredTools = useMemo(() => {
-    if (toolFilter === "all") {
-      return tools
-    }
+    if (toolFilter === "all") return tools
     return tools.filter((entry) => entry.source === toolFilter)
   }, [toolFilter, tools])
-
-  const installedConnectorKeys = useMemo(
-    () =>
-      connectors
-        .map((connector) => connector.key)
-        .filter((key) => key.trim().length > 0)
-        .sort((left, right) => left.localeCompare(right)),
-    [connectors]
-  )
 
   const load = useCallback(async (): Promise<void> => {
     setIsLoading(true)
@@ -189,9 +201,7 @@ export function ToolsView(): React.JSX.Element {
       setTools(loadedTools)
       setStatus(null)
     } catch (error) {
-      setStatus(
-        `Failed to load tool surfaces: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setStatus(`Failed to load: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
       setIsLoading(false)
     }
@@ -207,7 +217,6 @@ export function ToolsView(): React.JSX.Element {
       setSelectedSkillDetail(null)
       return
     }
-
     const hasSelection = selectedSkillId
       ? skills.some((skill) => skill.id === selectedSkillId)
       : false
@@ -230,22 +239,18 @@ export function ToolsView(): React.JSX.Element {
     void window.api.skills
       .getDetail(selectedSkillId)
       .then((detail) => {
-        if (!cancelled) {
-          setSelectedSkillDetail(detail)
-        }
+        if (!cancelled) setSelectedSkillDetail(detail)
       })
       .catch((error) => {
         if (!cancelled) {
           setSelectedSkillDetail(null)
           setSkillDetailStatus(
-            `Failed to load skill detail: ${error instanceof Error ? error.message : "Unknown error"}`
+            `Failed to load: ${error instanceof Error ? error.message : "Unknown error"}`
           )
         }
       })
       .finally(() => {
-        if (!cancelled) {
-          setIsSkillDetailLoading(false)
-        }
+        if (!cancelled) setIsSkillDetailLoading(false)
       })
 
     return () => {
@@ -272,10 +277,7 @@ export function ToolsView(): React.JSX.Element {
   }, [isCreatingTool, selectedToolId, selectedToolNameForTest, tools])
 
   useEffect(() => {
-    if (!selectedTool || isCreatingTool) {
-      return
-    }
-
+    if (!selectedTool || isCreatingTool) return
     setToolForm(toolToForm(selectedTool))
     setToolStatus(null)
   }, [isCreatingTool, selectedTool])
@@ -283,8 +285,9 @@ export function ToolsView(): React.JSX.Element {
   function startCreateTool(): void {
     setIsCreatingTool(true)
     setSelectedToolId(null)
-    setToolStatus("Create a custom tool and save it to register in this workspace.")
+    setToolStatus("Create a custom tool and save it to register.")
     setToolForm(defaultToolForm())
+    setShowAdvancedConfig(true)
   }
 
   function selectTool(toolId: string): void {
@@ -317,7 +320,7 @@ export function ToolsView(): React.JSX.Element {
         setIsCreatingTool(false)
         await load()
         setSelectedToolId(created.id)
-        setToolStatus(`Created custom tool "${created.name}".`)
+        setToolStatus(`Created "${created.name}".`)
         return
       }
 
@@ -327,37 +330,28 @@ export function ToolsView(): React.JSX.Element {
       }
 
       if (selectedTool.source === "system") {
-        await window.api.tools.update(selectedTool.id, {
-          enabled: toolForm.enabled
-        })
+        await window.api.tools.update(selectedTool.id, { enabled: toolForm.enabled })
         await load()
         setSelectedToolId(selectedTool.id)
-        setToolStatus(`Updated system tool "${selectedTool.name}" enabled state.`)
+        setToolStatus(`Updated "${selectedTool.name}" enabled state.`)
         return
       }
 
       await window.api.tools.update(selectedTool.id, payload)
       await load()
       setSelectedToolId(selectedTool.id)
-      setToolStatus(`Saved custom tool "${normalizeToolName(toolForm.name)}".`)
+      setToolStatus(`Saved "${normalizeToolName(toolForm.name)}".`)
     } catch (error) {
-      setToolStatus(
-        `Failed to save tool: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setToolStatus(`Failed: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
       setIsToolSaving(false)
     }
   }
 
   async function deleteSelectedTool(): Promise<void> {
-    if (!selectedTool || selectedTool.source !== "custom") {
-      return
-    }
-
-    const confirmed = window.confirm(`Delete custom tool "${selectedTool.name}"?`)
-    if (!confirmed) {
-      return
-    }
+    if (!selectedTool || selectedTool.source !== "custom") return
+    const confirmed = window.confirm(`Delete "${selectedTool.name}"?`)
+    if (!confirmed) return
 
     setIsToolDeleting(true)
     setToolStatus(null)
@@ -365,11 +359,9 @@ export function ToolsView(): React.JSX.Element {
       await window.api.tools.delete(selectedTool.id)
       await load()
       setSelectedToolId(null)
-      setToolStatus(`Deleted custom tool "${selectedTool.name}".`)
+      setToolStatus(`Deleted "${selectedTool.name}".`)
     } catch (error) {
-      setToolStatus(
-        `Failed to delete tool: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setToolStatus(`Failed: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
       setIsToolDeleting(false)
     }
@@ -382,17 +374,14 @@ export function ToolsView(): React.JSX.Element {
         setTestConsoleOutput("Args must be a JSON object.")
         return
       }
-
       const argKeys = Object.keys(parsed as Record<string, unknown>)
       setTestConsoleOutput(
-        `Safe sandbox preview only.\nTool: ${selectedToolNameForTest || "(none)"}\nArgs keys: ${
+        `Safe preview only.\nTool: ${selectedToolNameForTest || "(none)"}\nArgs: ${
           argKeys.length > 0 ? argKeys.join(", ") : "(none)"
-        }\nNo command was executed.`
+        }\nNo command executed.`
       )
     } catch (error) {
-      setTestConsoleOutput(
-        `Invalid JSON args: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      setTestConsoleOutput(`Invalid JSON: ${error instanceof Error ? error.message : "Unknown"}`)
     }
   }
 
@@ -400,505 +389,514 @@ export function ToolsView(): React.JSX.Element {
   const showDelete = !!selectedTool && selectedTool.source === "custom" && !isCreatingTool
 
   return (
-    <section className="flex h-full overflow-hidden bg-background">
-      <div className="flex flex-1 flex-col overflow-auto p-4">
+    <section className="flex h-full flex-col overflow-hidden bg-background">
+      <div className="flex-1 overflow-auto px-8 py-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-section-header">SKILLS / TOOLS</div>
-            <div className="text-xs text-muted-foreground">
-              Registry, MCP servers, custom tools, and sandbox previews.
-            </div>
+            <h1 className="text-xl font-semibold">Skills & Tools</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage registered tools, skills, and MCP servers
+            </p>
           </div>
-          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => void load()}>
-            <RefreshCw className="mr-1 size-3.5" />
-            {isLoading ? "Refreshing..." : "Refresh"}
+          <Button size="sm" variant="outline" onClick={() => void load()} disabled={isLoading}>
+            <RefreshCw className={cn("mr-2 size-4", isLoading && "animate-spin")} />
+            Refresh
           </Button>
         </div>
 
-        {status && <div className="mt-2 text-xs text-status-warning">{status}</div>}
-
-        <div className="mt-4 grid gap-3 xl:grid-cols-3">
-          <div className="rounded-sm border border-border p-3">
-            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <ShieldCheck className="size-3.5" />
-              Installed Skills
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              {skills.length} detected skill(s)
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {skillLocations.map((location) => (
-                <Badge
-                  key={`${location.source}:${location.path}`}
-                  variant={location.exists ? "info" : "outline"}
-                  title={location.path}
-                >
-                  {location.source}
-                </Badge>
-              ))}
-            </div>
-            <div className="mt-1 space-y-0.5">
-              {skillLocations.map((location) => (
-                <div key={location.path} className="truncate text-[10px] text-muted-foreground">
-                  {location.path}
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 max-h-44 space-y-1 overflow-auto pr-1">
-              {skills.length === 0 && (
-                <div className="rounded-sm border border-border p-2 text-xs text-muted-foreground">
-                  No skills found. Add skill folders with a SKILL.md in ~/.agents/skills.
-                </div>
-              )}
-              {skills.map((skill) => (
-                <button
-                  key={skill.id}
-                  onClick={() => setSelectedSkillId(skill.id)}
-                  className={`w-full rounded-sm border px-2 py-1.5 text-left text-xs transition-colors ${
-                    selectedSkillId === skill.id
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:bg-background-interactive"
-                  }`}
-                >
-                  <div className="truncate font-medium">{skill.name}</div>
-                  <div className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
-                    {skill.description}
-                  </div>
-                </button>
-              ))}
-            </div>
+        {status && (
+          <div className="mt-4 rounded-md border border-status-warning/30 bg-status-warning/10 px-4 py-2 text-sm text-status-warning">
+            {status}
           </div>
+        )}
 
-          <div className="rounded-sm border border-border p-3">
-            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <Server className="size-3.5" />
-              MCP Servers
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              {mcpServers.length} configured server(s)
-            </div>
-            <div className="mt-2 space-y-2">
-              {mcpServers.length === 0 && (
-                <div className="rounded-sm border border-border p-2 text-xs text-muted-foreground">
-                  No MCP servers configured.
-                </div>
-              )}
-              {mcpServers.map((server) => (
-                <div key={server.id} className="rounded-sm border border-border p-2 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="truncate font-medium">{server.name}</div>
-                    <Badge variant={getStatusBadgeVariant(server.status)}>{server.status}</Badge>
-                  </div>
-                  <div className="mt-1 truncate text-muted-foreground">{server.command}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-sm border border-border p-3">
-            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <ShieldCheck className="size-3.5" />
-              Connector Surface
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              {connectors.length} configured connector(s)
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {installedConnectorKeys.length === 0 && (
-                <Badge variant="outline">No connectors configured</Badge>
-              )}
-              {installedConnectorKeys.map((key) => (
-                <Badge key={key} variant="outline">
-                  {key}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-3 rounded-sm border border-border p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <Wrench className="size-3.5" />
-              Tool Registry
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={toolFilter}
-                onChange={(event) =>
-                  setToolFilter(event.target.value as "all" | "system" | "custom")
-                }
-                className="h-8 rounded-sm border border-input bg-background px-2 text-xs"
-              >
-                <option value="all">All tools</option>
-                <option value="system">System only</option>
-                <option value="custom">Custom only</option>
-              </select>
-              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={startCreateTool}>
-                <Plus className="mr-1 size-3.5" />
-                New Custom Tool
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {filteredTools.map((entry) => (
-              <button
-                key={entry.id}
-                onClick={() => selectTool(entry.id)}
-                className={`rounded-sm border p-2 text-left text-xs transition-colors ${
-                  selectedToolId === entry.id && !isCreatingTool
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:bg-background-interactive"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="truncate font-medium">{entry.name}</div>
-                  <Badge variant={getRiskBadgeVariant(entry.riskTier)}>Tier {entry.riskTier}</Badge>
-                </div>
-                <div className="mt-1 truncate text-muted-foreground">{entry.displayName}</div>
-                <div className="mt-1 line-clamp-2 text-muted-foreground">{entry.description}</div>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  <Badge variant={entry.source === "system" ? "outline" : "info"}>
-                    {entry.source}
-                  </Badge>
-                  <Badge variant={entry.enabled ? "info" : "outline"}>
-                    {entry.enabled ? "enabled" : "disabled"}
-                  </Badge>
-                  <Badge variant="outline">{entry.category}</Badge>
-                  <Badge variant="outline">{entry.action}</Badge>
-                </div>
-              </button>
-            ))}
-            {filteredTools.length === 0 && (
-              <div className="rounded-sm border border-border p-2 text-xs text-muted-foreground">
-                No tools match this filter.
+        <div className="mt-6 flex gap-6">
+          {/* Main content */}
+          <div className="flex-1 space-y-4">
+            {/* Summary row - compact stats */}
+            <div className="flex items-center gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="size-4 text-muted-foreground" />
+                <span className="font-medium">{skills.length}</span>
+                <span className="text-muted-foreground">skills</span>
               </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-3 rounded-sm border border-border p-3">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {isCreatingTool ? "Create Custom Tool" : "Tool Detail / Editor"}
-          </div>
-          <div className="mt-2 grid gap-2 md:grid-cols-2">
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Name
-              </label>
-              <Input
-                value={toolForm.name}
-                onChange={(event) =>
-                  setToolForm((current) => ({
-                    ...current,
-                    name: normalizeToolName(event.target.value)
-                  }))
-                }
-                placeholder="my_custom_tool"
-                disabled={editorIsSystemTool}
-                className="mt-1 h-8 text-xs"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Display Name
-              </label>
-              <Input
-                value={toolForm.displayName}
-                onChange={(event) =>
-                  setToolForm((current) => ({ ...current, displayName: event.target.value }))
-                }
-                placeholder="My Custom Tool"
-                disabled={editorIsSystemTool}
-                className="mt-1 h-8 text-xs"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Description
-              </label>
-              <textarea
-                value={toolForm.description}
-                onChange={(event) =>
-                  setToolForm((current) => ({ ...current, description: event.target.value }))
-                }
-                disabled={editorIsSystemTool}
-                className="mt-1 h-20 w-full rounded-sm border border-input bg-background px-2 py-1 text-xs"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Category
-              </label>
-              <select
-                value={toolForm.category}
-                onChange={(event) =>
-                  setToolForm((current) => ({
-                    ...current,
-                    category: event.target.value as ToolDefinition["category"]
-                  }))
-                }
-                disabled={editorIsSystemTool}
-                className="mt-1 h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
-              >
-                {TOOL_CATEGORY_OPTIONS.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Action
-              </label>
-              <select
-                value={toolForm.action}
-                onChange={(event) =>
-                  setToolForm((current) => ({
-                    ...current,
-                    action: event.target.value as ToolDefinition["action"]
-                  }))
-                }
-                disabled={editorIsSystemTool}
-                className="mt-1 h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
-              >
-                {TOOL_ACTION_OPTIONS.map((action) => (
-                  <option key={action} value={action}>
-                    {action}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Risk Tier
-              </label>
-              <select
-                value={toolForm.riskTier}
-                onChange={(event) =>
-                  setToolForm((current) => ({
-                    ...current,
-                    riskTier: Number(event.target.value) as ToolDefinition["riskTier"]
-                  }))
-                }
-                disabled={editorIsSystemTool}
-                className="mt-1 h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
-              >
-                <option value={0}>Tier 0</option>
-                <option value={1}>Tier 1</option>
-                <option value={2}>Tier 2</option>
-                <option value={3}>Tier 3</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Implementation
-              </label>
-              <select
-                value={toolForm.implementationType}
-                onChange={(event) =>
-                  setToolForm((current) => ({
-                    ...current,
-                    implementationType: event.target.value as ToolDefinition["implementationType"]
-                  }))
-                }
-                disabled={editorIsSystemTool}
-                className="mt-1 h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
-              >
-                {TOOL_IMPLEMENTATION_OPTIONS.map((implementationType) => (
-                  <option key={implementationType} value={implementationType}>
-                    {implementationType}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Enabled
-              </label>
-              <label className="mt-1 flex h-8 items-center gap-2 rounded-sm border border-input bg-background px-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={toolForm.enabled}
-                  onChange={(event) =>
-                    setToolForm((current) => ({
-                      ...current,
-                      enabled: event.target.checked
-                    }))
-                  }
-                  className="size-3.5"
-                />
-                Enabled in runtime
-              </label>
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Config JSON
-              </label>
-              <textarea
-                value={toolForm.configJson}
-                onChange={(event) =>
-                  setToolForm((current) => ({ ...current, configJson: event.target.value }))
-                }
-                disabled={editorIsSystemTool}
-                className="mt-1 h-40 w-full rounded-sm border border-input bg-background px-2 py-1 font-mono text-[11px]"
-                placeholder='{"commandTemplate":"npm test -- {{target}}"}'
-              />
-              <div className="mt-1 text-[11px] text-muted-foreground">
-                Script tools require <code>commandTemplate</code>. Use <code>{"{{token}}"}</code>{" "}
-                for shell-safe substitution and <code>{"{{{token}}}"}</code> for raw insertion.
+              <div className="flex items-center gap-2">
+                <Server className="size-4 text-muted-foreground" />
+                <span className="font-medium">{mcpServers.length}</span>
+                <span className="text-muted-foreground">MCP servers</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Wrench className="size-4 text-muted-foreground" />
+                <span className="font-medium">{tools.length}</span>
+                <span className="text-muted-foreground">tools</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{connectors.length}</span>
+                <span className="text-muted-foreground">connectors</span>
               </div>
             </div>
-          </div>
 
-          {!isCreatingTool && selectedTool && (
-            <div className="mt-2 grid gap-2 text-[11px] text-muted-foreground md:grid-cols-2">
-              <div className="truncate">ID: {selectedTool.id}</div>
-              <div>Source: {selectedTool.source}</div>
-              <div>Created: {formatDate(selectedTool.createdAt)}</div>
-              <div>Updated: {formatDate(selectedTool.updatedAt)}</div>
-            </div>
-          )}
-
-          {toolStatus && <div className="mt-2 text-xs text-status-warning">{toolStatus}</div>}
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => void saveTool()}
-              disabled={isToolSaving}
+            {/* Skills section - collapsible */}
+            <CollapsibleSection
+              title="Installed Skills"
+              icon={ShieldCheck}
+              count={skills.length}
+              defaultOpen={skills.length > 0 && skills.length <= 5}
             >
-              <Save className="mr-1 size-3.5" />
-              {isToolSaving ? "Saving..." : "Save Tool"}
-            </Button>
-            {showDelete && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() => void deleteSelectedTool()}
-                disabled={isToolDeleting}
-              >
-                <Trash2 className="mr-1 size-3.5" />
-                {isToolDeleting ? "Deleting..." : "Delete Tool"}
-              </Button>
-            )}
-            {isCreatingTool && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() => {
-                  setIsCreatingTool(false)
-                  setToolStatus(null)
-                  if (tools.length > 0) {
-                    setSelectedToolId(tools[0].id)
-                  }
-                }}
-              >
-                Cancel
-              </Button>
-            )}
+              <div className="space-y-2">
+                {skillLocations.length > 0 && (
+                  <div className="mb-3 space-y-1">
+                    {skillLocations.map((location) => (
+                      <div
+                        key={location.path}
+                        className="flex items-center gap-2 text-xs text-muted-foreground"
+                      >
+                        <span
+                          className={cn(
+                            "size-1.5 rounded-full",
+                            location.exists ? "bg-green-500" : "bg-muted"
+                          )}
+                        />
+                        <span className="font-medium">{location.source}</span>
+                        <span className="truncate">{location.path}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {skills.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No skills found. Add skill folders with SKILL.md to ~/.agents/skills
+                  </p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {skills.map((skill) => (
+                      <button
+                        key={skill.id}
+                        onClick={() => setSelectedSkillId(skill.id)}
+                        className={cn(
+                          "rounded-md border p-3 text-left transition-colors",
+                          selectedSkillId === skill.id
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/50"
+                        )}
+                      >
+                        <div className="font-medium">{skill.name}</div>
+                        <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                          {skill.description}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CollapsibleSection>
+
+            {/* MCP Servers - collapsible */}
+            <CollapsibleSection title="MCP Servers" icon={Server} count={mcpServers.length}>
+              {mcpServers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No MCP servers configured.</p>
+              ) : (
+                <div className="space-y-2">
+                  {mcpServers.map((server) => (
+                    <div
+                      key={server.id}
+                      className="flex items-center justify-between rounded-md border border-border p-3"
+                    >
+                      <div>
+                        <div className="font-medium">{server.name}</div>
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {server.command}
+                        </div>
+                      </div>
+                      <Badge variant={getStatusBadgeVariant(server.status)}>{server.status}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
+
+            {/* Tool Registry - main focus */}
+            <div className="rounded-md border border-border">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Wrench className="size-4 text-muted-foreground" />
+                  <span className="font-medium">Tool Registry</span>
+                  <span className="text-sm text-muted-foreground">({filteredTools.length})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={toolFilter}
+                    onChange={(e) => setToolFilter(e.target.value as "all" | "system" | "custom")}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="all">All</option>
+                    <option value="system">System</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                  <Button size="sm" variant="outline" onClick={startCreateTool}>
+                    <Plus className="mr-1 size-4" />
+                    New Tool
+                  </Button>
+                </div>
+              </div>
+
+              <div className="max-h-[400px] overflow-auto p-4">
+                {filteredTools.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No tools match this filter.</p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredTools.map((entry) => (
+                      <button
+                        key={entry.id}
+                        onClick={() => selectTool(entry.id)}
+                        className={cn(
+                          "rounded-md border p-3 text-left transition-colors",
+                          selectedToolId === entry.id && !isCreatingTool
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/50"
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="truncate font-medium">{entry.name}</span>
+                          <Badge variant={getRiskBadgeVariant(entry.riskTier)} className="ml-2">
+                            T{entry.riskTier}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 truncate text-xs text-muted-foreground">
+                          {entry.displayName}
+                        </div>
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{entry.category}</span>
+                          <span>•</span>
+                          <span>{entry.action}</span>
+                          {!entry.enabled && (
+                            <>
+                              <span>•</span>
+                              <span className="text-status-warning">disabled</span>
+                            </>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tool Editor - collapsible advanced options */}
+            <div className="rounded-md border border-border">
+              <div className="border-b border-border px-4 py-3">
+                <span className="font-medium">
+                  {isCreatingTool ? "Create Custom Tool" : "Tool Editor"}
+                </span>
+              </div>
+
+              <div className="space-y-4 p-4">
+                {/* Basic fields - always visible */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="form-group">
+                    <label className="form-label">Name</label>
+                    <Input
+                      value={toolForm.name}
+                      onChange={(e) =>
+                        setToolForm((c) => ({ ...c, name: normalizeToolName(e.target.value) }))
+                      }
+                      placeholder="my_custom_tool"
+                      disabled={editorIsSystemTool}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Display Name</label>
+                    <Input
+                      value={toolForm.displayName}
+                      onChange={(e) => setToolForm((c) => ({ ...c, displayName: e.target.value }))}
+                      placeholder="My Custom Tool"
+                      disabled={editorIsSystemTool}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Description</label>
+                  <textarea
+                    value={toolForm.description}
+                    onChange={(e) => setToolForm((c) => ({ ...c, description: e.target.value }))}
+                    disabled={editorIsSystemTool}
+                    rows={2}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={toolForm.enabled}
+                      onChange={(e) => setToolForm((c) => ({ ...c, enabled: e.target.checked }))}
+                      className="size-4 rounded border-input"
+                    />
+                    <span className="text-sm">Enabled in runtime</span>
+                  </label>
+                </div>
+
+                {/* Advanced options - collapsible */}
+                <button
+                  onClick={() => setShowAdvancedConfig(!showAdvancedConfig)}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDown
+                    className={cn(
+                      "size-4 transition-transform",
+                      showAdvancedConfig && "rotate-180"
+                    )}
+                  />
+                  Advanced configuration
+                </button>
+
+                {showAdvancedConfig && (
+                  <div className="space-y-4 border-t border-border pt-4">
+                    <div className="grid gap-4 sm:grid-cols-4">
+                      <div className="form-group">
+                        <label className="form-label">Category</label>
+                        <select
+                          value={toolForm.category}
+                          onChange={(e) =>
+                            setToolForm((c) => ({
+                              ...c,
+                              category: e.target.value as ToolDefinition["category"]
+                            }))
+                          }
+                          disabled={editorIsSystemTool}
+                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {TOOL_CATEGORY_OPTIONS.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Action</label>
+                        <select
+                          value={toolForm.action}
+                          onChange={(e) =>
+                            setToolForm((c) => ({
+                              ...c,
+                              action: e.target.value as ToolDefinition["action"]
+                            }))
+                          }
+                          disabled={editorIsSystemTool}
+                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {TOOL_ACTION_OPTIONS.map((action) => (
+                            <option key={action} value={action}>
+                              {action}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Risk Tier</label>
+                        <select
+                          value={toolForm.riskTier}
+                          onChange={(e) =>
+                            setToolForm((c) => ({
+                              ...c,
+                              riskTier: Number(e.target.value) as ToolDefinition["riskTier"]
+                            }))
+                          }
+                          disabled={editorIsSystemTool}
+                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value={0}>Tier 0</option>
+                          <option value={1}>Tier 1</option>
+                          <option value={2}>Tier 2</option>
+                          <option value={3}>Tier 3</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Implementation</label>
+                        <select
+                          value={toolForm.implementationType}
+                          onChange={(e) =>
+                            setToolForm((c) => ({
+                              ...c,
+                              implementationType: e.target
+                                .value as ToolDefinition["implementationType"]
+                            }))
+                          }
+                          disabled={editorIsSystemTool}
+                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {TOOL_IMPLEMENTATION_OPTIONS.map((impl) => (
+                            <option key={impl} value={impl}>
+                              {impl}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Config JSON</label>
+                      <textarea
+                        value={toolForm.configJson}
+                        onChange={(e) => setToolForm((c) => ({ ...c, configJson: e.target.value }))}
+                        disabled={editorIsSystemTool}
+                        rows={6}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm"
+                        placeholder='{"commandTemplate":"npm test -- {{target}}"}'
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Script tools require <code>commandTemplate</code>. Use{" "}
+                        <code>{"{{token}}"}</code> for shell-safe substitution.
+                      </p>
+                    </div>
+
+                    {!isCreatingTool && selectedTool && (
+                      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <div>ID: {selectedTool.id}</div>
+                        <div>Source: {selectedTool.source}</div>
+                        <div>Created: {formatDate(selectedTool.createdAt)}</div>
+                        <div>Updated: {formatDate(selectedTool.updatedAt)}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {toolStatus && <div className="text-sm text-status-warning">{toolStatus}</div>}
+
+                <div className="flex gap-2">
+                  <Button onClick={() => void saveTool()} disabled={isToolSaving}>
+                    <Save className="mr-2 size-4" />
+                    {isToolSaving ? "Saving..." : "Save"}
+                  </Button>
+                  {showDelete && (
+                    <Button
+                      variant="outline"
+                      onClick={() => void deleteSelectedTool()}
+                      disabled={isToolDeleting}
+                    >
+                      <Trash2 className="mr-2 size-4" />
+                      {isToolDeleting ? "Deleting..." : "Delete"}
+                    </Button>
+                  )}
+                  {isCreatingTool && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsCreatingTool(false)
+                        setToolStatus(null)
+                        if (tools.length > 0) setSelectedToolId(tools[0].id)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Sidebar */}
+          <aside className="w-80 shrink-0 space-y-4">
+            {/* Skill Detail */}
+            <div className="rounded-md border border-border">
+              <div className="border-b border-border px-4 py-3">
+                <span className="font-medium">Skill Detail</span>
+              </div>
+
+              <div className="p-4">
+                {!selectedSkillId ? (
+                  <p className="text-sm text-muted-foreground">Select a skill to view details.</p>
+                ) : isSkillDetailLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : skillDetailStatus ? (
+                  <p className="text-sm text-status-warning">{skillDetailStatus}</p>
+                ) : selectedSkillDetail ? (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="font-medium">{selectedSkillDetail.skill.name}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {selectedSkillDetail.skill.description}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Source: {selectedSkillDetail.skill.source}
+                      </div>
+                    </div>
+
+                    {selectedSkillDetail.skill.allowedTools.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {selectedSkillDetail.skill.allowedTools.map((toolName) => (
+                          <Badge
+                            key={`${selectedSkillDetail.skill.id}:${toolName}`}
+                            variant="outline"
+                          >
+                            {toolName}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    <pre className="max-h-48 overflow-auto rounded-md border border-border bg-sidebar p-2 font-mono text-xs text-muted-foreground">
+                      {selectedSkillDetail.content}
+                    </pre>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Test Console - collapsible */}
+            <CollapsibleSection title="Test Console" icon={FlaskConical}>
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Safe preview sandbox. Does not execute tools.
+                </p>
+
+                <div className="form-group">
+                  <label className="form-label">Tool</label>
+                  <select
+                    value={selectedToolNameForTest}
+                    onChange={(e) => setSelectedToolNameForTest(e.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {tools.map((entry) => (
+                      <option key={entry.id} value={entry.name}>
+                        {entry.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Args JSON</label>
+                  <textarea
+                    value={testArgsJson}
+                    onChange={(e) => setTestArgsJson(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm"
+                    placeholder='{"path":"README.md"}'
+                  />
+                </div>
+
+                <Button size="sm" className="w-full" onClick={runToolTestDryRun}>
+                  <FlaskConical className="mr-2 size-4" />
+                  Run Preview
+                </Button>
+
+                {testConsoleOutput && (
+                  <pre className="rounded-md border border-border bg-sidebar p-2 font-mono text-xs text-muted-foreground">
+                    {testConsoleOutput}
+                  </pre>
+                )}
+              </div>
+            </CollapsibleSection>
+          </aside>
         </div>
       </div>
-
-      <aside className="w-[360px] shrink-0 overflow-auto border-l border-border bg-sidebar p-4">
-        <div className="text-section-header">SKILL DETAIL</div>
-        <div className="mt-1 text-xs text-muted-foreground">
-          Review full skill instructions from global skill registries.
-        </div>
-
-        {!selectedSkillId && (
-          <div className="mt-3 rounded-sm border border-border bg-background px-2 py-1.5 text-xs text-muted-foreground">
-            Select a skill to inspect.
-          </div>
-        )}
-
-        {selectedSkillDetail && (
-          <div className="mt-3 rounded-sm border border-border bg-background p-2">
-            <div className="text-sm font-medium">{selectedSkillDetail.skill.name}</div>
-            <div className="mt-1 text-[11px] text-muted-foreground">
-              {selectedSkillDetail.skill.description}
-            </div>
-            <div className="mt-1 text-[11px] text-muted-foreground">
-              Source: {selectedSkillDetail.skill.source}
-            </div>
-            <div className="mt-1 break-all text-[10px] text-muted-foreground">
-              {selectedSkillDetail.skill.path}
-            </div>
-            {selectedSkillDetail.skill.allowedTools.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {selectedSkillDetail.skill.allowedTools.map((toolName) => (
-                  <Badge key={`${selectedSkillDetail.skill.id}:${toolName}`} variant="outline">
-                    {toolName}
-                  </Badge>
-                ))}
-              </div>
-            )}
-            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-sm border border-border bg-sidebar p-2 font-mono text-[10px] text-muted-foreground">
-              {selectedSkillDetail.content}
-            </pre>
-          </div>
-        )}
-
-        {isSkillDetailLoading && (
-          <div className="mt-2 text-xs text-muted-foreground">Loading skill detail...</div>
-        )}
-        {skillDetailStatus && (
-          <div className="mt-2 text-xs text-status-warning">{skillDetailStatus}</div>
-        )}
-
-        <div className="mt-4 border-t border-border pt-4">
-          <div className="text-section-header">TOOL TEST CONSOLE</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Safe preview sandbox. This does not execute tools.
-          </div>
-
-          <div className="mt-3">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Tool
-            </label>
-            <select
-              value={selectedToolNameForTest}
-              onChange={(event) => setSelectedToolNameForTest(event.target.value)}
-              className="mt-1 h-8 w-full rounded-sm border border-input bg-background px-2 text-xs"
-            >
-              {tools.map((entry) => (
-                <option key={entry.id} value={entry.name}>
-                  {entry.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mt-3">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Args JSON
-            </label>
-            <textarea
-              value={testArgsJson}
-              onChange={(event) => setTestArgsJson(event.target.value)}
-              className="mt-1 h-40 w-full rounded-sm border border-input bg-background px-2 py-1 font-mono text-[11px]"
-              placeholder='{"path":"README.md"}'
-            />
-          </div>
-
-          <Button size="sm" className="mt-3 h-8 w-full text-xs" onClick={runToolTestDryRun}>
-            <FlaskConical className="mr-1 size-3.5" />
-            Run Safe Preview
-          </Button>
-
-          {testConsoleOutput && (
-            <pre className="mt-3 whitespace-pre-wrap rounded-sm border border-border bg-background p-2 font-mono text-[11px] text-muted-foreground">
-              {testConsoleOutput}
-            </pre>
-          )}
-        </div>
-      </aside>
     </section>
   )
 }
