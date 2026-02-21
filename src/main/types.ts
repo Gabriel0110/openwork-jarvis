@@ -406,6 +406,8 @@ export interface ConnectorImportResult {
 
 // ZeroClaw deployment IPC
 export type ZeroClawInstallState = "not_installed" | "installing" | "installed" | "error"
+export type ZeroClawInstallActivityState = "idle" | "running" | "success" | "error"
+export type ZeroClawInstallActivityStream = "system" | "stdout" | "stderr"
 export type ZeroClawDeploymentStatus =
   | "created"
   | "starting"
@@ -438,6 +440,24 @@ export interface ZeroClawInstallStatus {
   installations: ZeroClawVersionRecord[]
   lastError?: string
   runtimeRoot: string
+}
+
+export interface ZeroClawInstallActivityLine {
+  id: number
+  stream: ZeroClawInstallActivityStream
+  message: string
+  occurredAt: Date
+}
+
+export interface ZeroClawInstallActivity {
+  state: ZeroClawInstallActivityState
+  phase: string
+  targetVersion?: string
+  startedAt?: Date
+  updatedAt: Date
+  completedAt?: Date
+  lastError?: string
+  lines: ZeroClawInstallActivityLine[]
 }
 
 export interface ZeroClawCapabilityPolicy {

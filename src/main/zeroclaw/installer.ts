@@ -10,7 +10,13 @@ import {
   setActiveZeroClawInstallation,
   upsertZeroClawInstallation
 } from "../db/zeroclaw"
-import type { ZeroClawActionResult, ZeroClawInstallStatus, ZeroClawVersionRecord } from "../types"
+import type {
+  ZeroClawActionResult,
+  ZeroClawInstallActivity,
+  ZeroClawInstallActivityStream,
+  ZeroClawInstallStatus,
+  ZeroClawVersionRecord
+} from "../types"
 import { getReleaseAssetForCurrentPlatform, loadZeroClawManifest } from "./release-manifest"
 import type { ZeroClawReleaseAsset } from "./types"
 
@@ -20,10 +26,20 @@ interface ProcessResult {
   stderr: string
 }
 
-function runProcess(command: string, args: string[], cwd?: string): Promise<ProcessResult> {
+interface ProcessRunOptions {
+  cwd?: string
+  onStdoutChunk?: (chunk: string) => void
+  onStderrChunk?: (chunk: string) => void
+}
+
+function runProcess(
+  command: string,
+  args: string[],
+  options?: ProcessRunOptions
+): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd,
+      cwd: options?.cwd,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"]
     })
@@ -31,10 +47,14 @@ function runProcess(command: string, args: string[], cwd?: string): Promise<Proc
     let stdout = ""
     let stderr = ""
     child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString()
+      const text = chunk.toString()
+      stdout += text
+      options?.onStdoutChunk?.(text)
     })
     child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString()
+      const text = chunk.toString()
+      stderr += text
+      options?.onStderrChunk?.(text)
     })
     child.on("error", (error) => reject(error))
     child.on("close", (code) => {
@@ -71,9 +91,18 @@ function resolveCargoRefArgs(asset: ZeroClawReleaseAsset): string[] {
   return ["--branch", asset.gitRef]
 }
 
+const MAX_ACTIVITY_LINES = 600
+
 export class ZeroClawInstaller {
   private readonly zeroClawDir: string
   private readonly runtimeRoot: string
+  private activityLineCounter = 0
+  private installActivity: ZeroClawInstallActivity = {
+    state: "idle",
+    phase: "idle",
+    updatedAt: new Date(),
+    lines: []
+  }
 
   constructor() {
     this.zeroClawDir = getZeroClawDir()
@@ -84,17 +113,112 @@ export class ZeroClawInstaller {
     return this.runtimeRoot
   }
 
+  getInstallActivity(): ZeroClawInstallActivity {
+    return {
+      ...this.installActivity,
+      lines: [...this.installActivity.lines]
+    }
+  }
+
+  private beginInstallActivity(targetVersion: string): void {
+    const now = new Date()
+    this.activityLineCounter = 0
+    this.installActivity = {
+      state: "running",
+      phase: "initializing",
+      targetVersion,
+      startedAt: now,
+      updatedAt: now,
+      lines: []
+    }
+    this.appendActivityLine("system", `Starting ZeroClaw runtime install for ${targetVersion}.`)
+  }
+
+  private setInstallPhase(phase: string, message?: string): void {
+    this.installActivity.phase = phase
+    this.installActivity.updatedAt = new Date()
+    if (message) {
+      this.appendActivityLine("system", message)
+    }
+  }
+
+  private appendActivityLine(stream: ZeroClawInstallActivityStream, message: string): void {
+    const normalized = message.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    const lines = normalized.split("\n")
+    for (const line of lines) {
+      if (line.length === 0) {
+        continue
+      }
+      this.installActivity.lines.push({
+        id: ++this.activityLineCounter,
+        stream,
+        message: line,
+        occurredAt: new Date()
+      })
+    }
+    if (this.installActivity.lines.length > MAX_ACTIVITY_LINES) {
+      this.installActivity.lines.splice(0, this.installActivity.lines.length - MAX_ACTIVITY_LINES)
+    }
+    this.installActivity.updatedAt = new Date()
+  }
+
+  private completeInstallActivity(message: string): void {
+    this.appendActivityLine("system", message)
+    this.installActivity.state = "success"
+    this.installActivity.phase = "completed"
+    this.installActivity.lastError = undefined
+    this.installActivity.completedAt = new Date()
+    this.installActivity.updatedAt = this.installActivity.completedAt
+  }
+
+  private failInstallActivity(message: string): void {
+    this.appendActivityLine("stderr", message)
+    this.installActivity.state = "error"
+    this.installActivity.phase = "failed"
+    this.installActivity.lastError = message
+    this.installActivity.completedAt = new Date()
+    this.installActivity.updatedAt = this.installActivity.completedAt
+  }
+
+  private streamChunkToActivity(
+    stream: ZeroClawInstallActivityStream,
+    chunk: string,
+    carry: string
+  ): string {
+    const combined = `${carry}${chunk}`.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    const lines = combined.split("\n")
+    const trailing = lines.pop() || ""
+    for (const line of lines) {
+      this.appendActivityLine(stream, line)
+    }
+    return trailing
+  }
+
+  private flushChunkCarryToActivity(stream: ZeroClawInstallActivityStream, carry: string): void {
+    if (carry.trim().length > 0) {
+      this.appendActivityLine(stream, carry)
+    }
+  }
+
   getInstallStatus(lastError?: string): ZeroClawInstallStatus {
     const installations = listZeroClawInstallations()
     const manifest = loadZeroClawManifest()
     const active = installations.find((entry) => entry.isActive)
+    const activityState = this.installActivity.state
 
     return {
-      state: active ? "installed" : "not_installed",
+      state:
+        activityState === "running"
+          ? "installing"
+          : active
+            ? "installed"
+            : activityState === "error"
+              ? "error"
+              : "not_installed",
       activeVersion: active?.version,
       availableVersions: Array.from(new Set(manifest.releases.map((entry) => entry.version))),
       installations,
-      lastError,
+      lastError: this.installActivity.lastError || lastError,
       runtimeRoot: this.runtimeRoot
     }
   }
@@ -151,6 +275,9 @@ export class ZeroClawInstaller {
   private async installViaCargo(stageDir: string, asset: ZeroClawReleaseAsset): Promise<void> {
     const cargoPackage = asset.cargoPackage || "zeroclaw"
     const refArgs = resolveCargoRefArgs(asset)
+    this.setInstallPhase("cargo_install", `Running cargo install (${cargoPackage})...`)
+    let stdoutCarry = ""
+    let stderrCarry = ""
 
     const installResult = await runProcess(
       "cargo",
@@ -165,8 +292,18 @@ export class ZeroClawInstaller {
         stageDir,
         "--force"
       ],
-      this.zeroClawDir
+      {
+        cwd: this.zeroClawDir,
+        onStdoutChunk: (chunk) => {
+          stdoutCarry = this.streamChunkToActivity("stdout", chunk, stdoutCarry)
+        },
+        onStderrChunk: (chunk) => {
+          stderrCarry = this.streamChunkToActivity("stderr", chunk, stderrCarry)
+        }
+      }
     )
+    this.flushChunkCarryToActivity("stdout", stdoutCarry)
+    this.flushChunkCarryToActivity("stderr", stderrCarry)
 
     if (installResult.code !== 0) {
       throw new Error(
@@ -179,6 +316,7 @@ export class ZeroClawInstaller {
     stageDir: string,
     asset: ZeroClawReleaseAsset
   ): Promise<void> {
+    this.setInstallPhase("download_source", "Downloading source tarball fallback...")
     if (!asset.sourceUrl) {
       throw new Error("sourceUrl missing in release manifest.")
     }
@@ -189,6 +327,10 @@ export class ZeroClawInstaller {
     }
     const bytes = Buffer.from(await response.arrayBuffer())
     await writeFile(tmpArchivePath, bytes)
+    this.appendActivityLine(
+      "system",
+      `Downloaded source archive (${Math.round(bytes.length / 1024)} KiB).`
+    )
 
     if (asset.sourceSha256) {
       const archiveHash = await fileSha256(tmpArchivePath)
@@ -201,7 +343,11 @@ export class ZeroClawInstaller {
 
     const unpackDir = join(stageDir, "src")
     mkdirSync(unpackDir, { recursive: true })
-    const extractResult = await runProcess("tar", ["-xzf", tmpArchivePath, "-C", unpackDir])
+    this.setInstallPhase("extract_source", "Extracting source archive...")
+    const extractResult = await runProcess("tar", ["-xzf", tmpArchivePath, "-C", unpackDir], {
+      onStdoutChunk: (chunk) => this.appendActivityLine("stdout", chunk),
+      onStderrChunk: (chunk) => this.appendActivityLine("stderr", chunk)
+    })
     if (extractResult.code !== 0) {
       throw new Error(
         `Failed extracting ZeroClaw source: ${extractResult.stderr || extractResult.stdout}`
@@ -217,27 +363,36 @@ export class ZeroClawInstaller {
   async installVersion(version?: string): Promise<ZeroClawVersionRecord> {
     const manifest = loadZeroClawManifest()
     const targetVersion = version || manifest.latestVersion
-    const asset = getReleaseAssetForCurrentPlatform(manifest, targetVersion)
-    if (!asset) {
-      throw new Error(
-        `No installable ZeroClaw asset for version "${targetVersion}" on this platform.`
-      )
-    }
+    this.beginInstallActivity(targetVersion)
 
     const versionRoot = this.resolveVersionRoot(targetVersion)
-    const binaryPath = this.resolveBinaryPath(targetVersion, asset)
+    let binaryPath = join(versionRoot, "bin", "zeroclaw")
+    const asset = getReleaseAssetForCurrentPlatform(manifest, targetVersion)
+    if (!asset) {
+      const errorMessage = `No installable ZeroClaw asset for version "${targetVersion}" on this platform.`
+      this.failInstallActivity(errorMessage)
+      throw new Error(errorMessage)
+    }
+    const checksumSha256 = asset.sourceSha256
+    binaryPath = this.resolveBinaryPath(targetVersion, asset)
+
     if (existsSync(binaryPath)) {
+      this.setInstallPhase(
+        "reuse_existing",
+        `Using existing runtime binary for version ${targetVersion}.`
+      )
       await this.ensureBinaryExecutable(binaryPath)
       const record = upsertZeroClawInstallation({
         version: targetVersion,
         source: "managed",
         installPath: versionRoot,
         binaryPath,
-        checksumSha256: asset.sourceSha256,
+        checksumSha256,
         status: "installed",
         isActive: true
       })
       setActiveZeroClawInstallation(record.version)
+      this.completeInstallActivity(`Runtime ${targetVersion} is ready.`)
       return record
     }
 
@@ -245,6 +400,7 @@ export class ZeroClawInstaller {
       this.runtimeRoot,
       `.staging-${Date.now()}-${versionToSafeDir(targetVersion)}`
     )
+    this.setInstallPhase("stage_prepare", `Preparing staging directory ${stageDir}.`)
     mkdirSync(stageDir, { recursive: true })
 
     try {
@@ -252,14 +408,20 @@ export class ZeroClawInstaller {
       const stagedBinary = join(stageDir, "bin", "zeroclaw")
       if (!existsSync(stagedBinary)) {
         if (asset.sourceUrl) {
+          this.appendActivityLine(
+            "system",
+            "Cargo install did not produce binary; trying source tarball fallback."
+          )
           await this.installViaSourceTarball(stageDir, asset)
         }
       }
       await this.ensureBinaryExecutable(stagedBinary)
 
       if (existsSync(versionRoot)) {
+        this.setInstallPhase("replace_existing", `Replacing existing runtime at ${versionRoot}.`)
         rmSync(versionRoot, { recursive: true, force: true })
       }
+      this.setInstallPhase("promote", `Promoting staged runtime to ${versionRoot}.`)
       await rename(stageDir, versionRoot)
 
       const installedBinaryPath = this.resolveBinaryPath(targetVersion, asset)
@@ -269,25 +431,33 @@ export class ZeroClawInstaller {
         source: "managed",
         installPath: versionRoot,
         binaryPath: installedBinaryPath,
-        checksumSha256: asset.sourceSha256,
+        checksumSha256,
         status: "installed",
         isActive: true
       })
       setActiveZeroClawInstallation(record.version)
+      this.completeInstallActivity(`Installed runtime version ${targetVersion}.`)
       return record
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown install error"
       upsertZeroClawInstallation({
         version: targetVersion,
         source: "managed",
         installPath: versionRoot,
         binaryPath,
-        checksumSha256: asset.sourceSha256,
+        checksumSha256,
         status: "error",
-        lastError: error instanceof Error ? error.message : "Unknown install error"
+        lastError: errorMessage
       })
+      this.failInstallActivity(errorMessage)
       throw error
     } finally {
       if (existsSync(stageDir)) {
+        if (this.installActivity.state === "running") {
+          this.setInstallPhase("cleanup", "Cleaning staging artifacts.")
+        } else {
+          this.appendActivityLine("system", "Cleaning staging artifacts.")
+        }
         rmSync(stageDir, { recursive: true, force: true })
       }
     }

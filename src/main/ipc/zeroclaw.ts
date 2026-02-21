@@ -34,6 +34,10 @@ export function registerZeroClawHandlers(ipcMain: IpcMain): void {
     return manager.getInstallStatus()
   })
 
+  ipcMain.handle("zeroclaw:install:getActivity", async () => {
+    return manager.getInstallActivity()
+  })
+
   ipcMain.handle(
     "zeroclaw:install:installVersion",
     async (_event, params?: ZeroClawInstallVersionParams) => {

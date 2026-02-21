@@ -34,6 +34,7 @@ import type {
   ZeroClawDeploymentSpec,
   ZeroClawDeploymentState,
   ZeroClawDoctorReport,
+  ZeroClawInstallActivity,
   ZeroClawInstallStatus,
   ZeroClawRuntimeHealth,
   ZeroClawRuntimeEvent,
@@ -565,6 +566,9 @@ const api = {
     install: {
       getStatus: (): Promise<ZeroClawInstallStatus> => {
         return ipcRenderer.invoke("zeroclaw:install:getStatus")
+      },
+      getActivity: (): Promise<ZeroClawInstallActivity> => {
+        return ipcRenderer.invoke("zeroclaw:install:getActivity")
       },
       installVersion: (version?: string): Promise<ZeroClawInstallStatus> => {
         return ipcRenderer.invoke("zeroclaw:install:installVersion", { version })

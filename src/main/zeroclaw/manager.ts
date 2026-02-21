@@ -29,6 +29,7 @@ import type {
   ZeroClawDoctorReport,
   ZeroClawEffectiveCapabilitySet,
   ZeroClawInstallStatus,
+  ZeroClawInstallActivity,
   ZeroClawRuntimeHealth
 } from "../types"
 import { listGlobalSkills } from "../services/skills-registry"
@@ -228,6 +229,10 @@ export class ZeroClawManager {
 
   getInstallStatus(): ZeroClawInstallStatus {
     return this.installer.getInstallStatus(this.lastInstallError)
+  }
+
+  getInstallActivity(): ZeroClawInstallActivity {
+    return this.installer.getInstallActivity()
   }
 
   async installVersion(version?: string): Promise<ZeroClawInstallStatus> {

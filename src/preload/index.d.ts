@@ -32,6 +32,7 @@ import type {
   ZeroClawDeploymentSpec,
   ZeroClawDeploymentState,
   ZeroClawDoctorReport,
+  ZeroClawInstallActivity,
   ZeroClawInstallStatus,
   ZeroClawRuntimeHealth,
   ZeroClawRuntimeEvent,
@@ -325,6 +326,7 @@ interface CustomAPI {
   zeroclaw: {
     install: {
       getStatus: () => Promise<ZeroClawInstallStatus>
+      getActivity: () => Promise<ZeroClawInstallActivity>
       installVersion: (version?: string) => Promise<ZeroClawInstallStatus>
       verify: () => Promise<ZeroClawActionResult>
       upgrade: (version: string) => Promise<ZeroClawInstallStatus>

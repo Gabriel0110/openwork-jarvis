@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const { managerMock, getZeroClawManagerMock } = vi.hoisted(() => {
   const manager = {
     getInstallStatus: vi.fn(),
+    getInstallActivity: vi.fn(),
     installVersion: vi.fn(),
     verifyInstallation: vi.fn(),
     upgrade: vi.fn(),
@@ -72,6 +73,7 @@ describe("registerZeroClawHandlers", () => {
   it("registers install handlers", async () => {
     const { ipcMain, handlers } = createIpcHarness()
     managerMock.getInstallStatus.mockReturnValue({ state: "installed", installations: [] })
+    managerMock.getInstallActivity.mockReturnValue({ state: "idle", phase: "idle", lines: [] })
     managerMock.installVersion.mockResolvedValue({ state: "installed", installations: [] })
     managerMock.verifyInstallation.mockResolvedValue({ ok: true })
     managerMock.upgrade.mockResolvedValue({ state: "installed", installations: [] })
@@ -81,6 +83,13 @@ describe("registerZeroClawHandlers", () => {
     await expect(requiredHandler(handlers, "zeroclaw:install:getStatus")({}, {})).resolves.toEqual({
       state: "installed",
       installations: []
+    })
+    await expect(
+      requiredHandler(handlers, "zeroclaw:install:getActivity")({}, {})
+    ).resolves.toEqual({
+      state: "idle",
+      phase: "idle",
+      lines: []
     })
     await expect(
       requiredHandler(handlers, "zeroclaw:install:installVersion")({}, { version: "main" })

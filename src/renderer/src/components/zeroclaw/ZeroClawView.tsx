@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Bot,
   Download,
@@ -21,6 +21,7 @@ import type {
   ZeroClawCapabilityPolicy,
   ZeroClawDeploymentState,
   ZeroClawDoctorReport,
+  ZeroClawInstallActivity,
   ZeroClawInstallStatus,
   ZeroClawRuntimeEvent,
   ZeroClawRuntimeHealth
@@ -219,6 +220,8 @@ function redactSecrets(value: unknown, keyHint?: string): unknown {
 export function ZeroClawView(): React.JSX.Element {
   const { selectThread, zeroClawDeploymentFocusId, setZeroClawDeploymentFocusId } = useAppStore()
   const [zeroClawStatus, setZeroClawStatus] = useState<ZeroClawInstallStatus | null>(null)
+  const [zeroClawInstallActivity, setZeroClawInstallActivity] =
+    useState<ZeroClawInstallActivity | null>(null)
   const [zeroClawDeployments, setZeroClawDeployments] = useState<ZeroClawDeploymentState[]>([])
   const [selectedZeroClawDeploymentId, setSelectedZeroClawDeploymentId] = useState<string | null>(
     null
@@ -247,6 +250,7 @@ export function ZeroClawView(): React.JSX.Element {
   const [zeroClawForm, setZeroClawForm] = useState<ZeroClawDeploymentFormState>(
     defaultZeroClawDeploymentForm
   )
+  const installActivityLogRef = useRef<HTMLDivElement | null>(null)
 
   const selectedZeroClawDeployment = useMemo(
     () => zeroClawDeployments.find((entry) => entry.id === selectedZeroClawDeploymentId) || null,
@@ -306,15 +310,34 @@ export function ZeroClawView(): React.JSX.Element {
     [filteredZeroClawInvocations]
   )
 
+  const refreshInstallActivity = useCallback(
+    async (options?: { silent?: boolean }): Promise<void> => {
+      try {
+        const activity = await window.api.zeroclaw.install.getActivity()
+        setZeroClawInstallActivity(activity)
+      } catch (error) {
+        if (options?.silent) {
+          return
+        }
+        setZeroClawStatusMessage(
+          `Failed loading install activity: ${error instanceof Error ? error.message : "Unknown error"}`
+        )
+      }
+    },
+    []
+  )
+
   const load = useCallback(async (): Promise<void> => {
     setIsLoading(true)
     try {
-      const [status, deployments] = await Promise.all([
+      const [status, deployments, activity] = await Promise.all([
         window.api.zeroclaw.install.getStatus(),
-        window.api.zeroclaw.deployment.list()
+        window.api.zeroclaw.deployment.list(),
+        window.api.zeroclaw.install.getActivity()
       ])
       setZeroClawStatus(status)
       setZeroClawDeployments(deployments)
+      setZeroClawInstallActivity(activity)
       setSelectedUpgradeVersion((current) => {
         const available = status.availableVersions || []
         if (available.length === 0) {
@@ -452,6 +475,25 @@ export function ZeroClawView(): React.JSX.Element {
   ])
 
   useEffect(() => {
+    if (zeroClawInstallActivity?.state !== "running") {
+      return
+    }
+    const timer = setInterval(() => {
+      void refreshInstallActivity({ silent: true })
+    }, 500)
+    return () => {
+      clearInterval(timer)
+    }
+  }, [refreshInstallActivity, zeroClawInstallActivity?.state])
+
+  useEffect(() => {
+    if (!installActivityLogRef.current) {
+      return
+    }
+    installActivityLogRef.current.scrollTop = installActivityLogRef.current.scrollHeight
+  }, [zeroClawInstallActivity?.lines.length])
+
+  useEffect(() => {
     if (
       !autoRefreshDiagnostics ||
       !selectedZeroClawDeploymentId ||
@@ -494,8 +536,10 @@ export function ZeroClawView(): React.JSX.Element {
     setIsZeroClawBusy(true)
     setZeroClawStatusMessage(null)
     try {
+      await refreshInstallActivity({ silent: true })
       const status = await window.api.zeroclaw.install.installVersion()
       setZeroClawStatus(status)
+      await refreshInstallActivity({ silent: true })
       await load()
       setZeroClawStatusMessage(
         status.activeVersion
@@ -533,8 +577,10 @@ export function ZeroClawView(): React.JSX.Element {
     setIsZeroClawBusy(true)
     setZeroClawStatusMessage(null)
     try {
+      await refreshInstallActivity({ silent: true })
       const status = await window.api.zeroclaw.install.upgrade(selectedUpgradeVersion)
       setZeroClawStatus(status)
+      await refreshInstallActivity({ silent: true })
       await load()
       setZeroClawStatusMessage(`Upgraded managed runtime to ${selectedUpgradeVersion}.`)
     } catch (error) {
@@ -543,6 +589,26 @@ export function ZeroClawView(): React.JSX.Element {
       )
     } finally {
       setIsZeroClawBusy(false)
+    }
+  }
+
+  async function copyInstallActivityLog(): Promise<void> {
+    if (!zeroClawInstallActivity || zeroClawInstallActivity.lines.length === 0) {
+      setZeroClawStatusMessage("No install activity log lines available.")
+      return
+    }
+    const payload = zeroClawInstallActivity.lines
+      .map(
+        (line) => `[${formatDate(line.occurredAt)}] ${line.stream.toUpperCase()} ${line.message}`
+      )
+      .join("\n")
+    try {
+      await navigator.clipboard.writeText(payload)
+      setZeroClawStatusMessage("Copied install activity logs to clipboard.")
+    } catch (error) {
+      setZeroClawStatusMessage(
+        `Failed copying install logs: ${error instanceof Error ? error.message : "Unknown error"}`
+      )
     }
   }
 
@@ -1005,6 +1071,88 @@ export function ZeroClawView(): React.JSX.Element {
               <Badge variant="outline">Active: {zeroClawStatus.activeVersion}</Badge>
             )}
             <span>{zeroClawDeployments.length} deployment(s)</span>
+          </div>
+
+          <div className="mt-2 rounded-sm border border-border bg-background p-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Install Activity
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <Badge
+                  variant={
+                    zeroClawInstallActivity?.state === "error"
+                      ? "critical"
+                      : zeroClawInstallActivity?.state === "running"
+                        ? "warning"
+                        : zeroClawInstallActivity?.state === "success"
+                          ? "info"
+                          : "outline"
+                  }
+                >
+                  {zeroClawInstallActivity?.state || "idle"}
+                </Badge>
+                {zeroClawInstallActivity?.targetVersion && (
+                  <Badge variant="outline">target {zeroClawInstallActivity.targetVersion}</Badge>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[10px]"
+                  onClick={() => void refreshInstallActivity()}
+                  disabled={isZeroClawBusy && zeroClawInstallActivity?.state === "running"}
+                >
+                  Refresh feed
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[10px]"
+                  onClick={() => void copyInstallActivityLog()}
+                  disabled={(zeroClawInstallActivity?.lines.length || 0) === 0}
+                >
+                  Copy logs
+                </Button>
+              </div>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+              <span>phase: {zeroClawInstallActivity?.phase || "idle"}</span>
+              <span>
+                started:{" "}
+                {zeroClawInstallActivity?.startedAt
+                  ? formatDate(zeroClawInstallActivity.startedAt)
+                  : "n/a"}
+              </span>
+              <span>
+                updated:{" "}
+                {zeroClawInstallActivity?.updatedAt
+                  ? formatDate(zeroClawInstallActivity.updatedAt)
+                  : "n/a"}
+              </span>
+              <span>lines: {zeroClawInstallActivity?.lines.length || 0}</span>
+            </div>
+            <div
+              ref={installActivityLogRef}
+              className="mt-2 max-h-44 overflow-auto rounded-sm border border-border bg-background p-2 font-mono text-[10px] text-muted-foreground"
+            >
+              {!zeroClawInstallActivity || zeroClawInstallActivity.lines.length === 0 ? (
+                <div>No install activity yet.</div>
+              ) : (
+                zeroClawInstallActivity.lines.map((line) => (
+                  <div
+                    key={line.id}
+                    className={line.stream === "stderr" ? "text-status-critical" : undefined}
+                  >
+                    [{formatDate(line.occurredAt)}] {line.stream.toUpperCase()} {line.message}
+                  </div>
+                ))
+              )}
+            </div>
+            {zeroClawInstallActivity?.lastError && (
+              <div className="mt-1 text-[11px] text-status-critical">
+                last error: {zeroClawInstallActivity.lastError}
+              </div>
+            )}
           </div>
 
           <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">

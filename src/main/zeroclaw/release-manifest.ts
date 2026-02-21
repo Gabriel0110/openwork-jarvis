@@ -3,22 +3,42 @@ import { join } from "node:path"
 import type { ZeroClawReleaseAsset, ZeroClawReleaseManifest } from "./types"
 
 const DEFAULT_MANIFEST: ZeroClawReleaseManifest = {
-  latestVersion: "main",
+  latestVersion: "stable-da684b7",
   releases: [
     {
       platform: "darwin-arm64",
-      version: "main",
-      sourceUrl: "https://codeload.github.com/openagen/zeroclaw/tar.gz/refs/heads/main",
+      version: "stable-da684b7",
+      sourceUrl:
+        "https://codeload.github.com/openagen/zeroclaw/tar.gz/da684b79113547734816fee577351229d1c41097",
       cargoPackage: "zeroclaw",
-      gitRef: "main",
+      gitRef: "da684b79113547734816fee577351229d1c41097",
+      binaryRelativePath: "bin/zeroclaw"
+    },
+    {
+      platform: "darwin-arm64",
+      version: "main",
+      sourceUrl:
+        "https://codeload.github.com/openagen/zeroclaw/tar.gz/da684b79113547734816fee577351229d1c41097",
+      cargoPackage: "zeroclaw",
+      gitRef: "da684b79113547734816fee577351229d1c41097",
+      binaryRelativePath: "bin/zeroclaw"
+    },
+    {
+      platform: "darwin-x64",
+      version: "stable-da684b7",
+      sourceUrl:
+        "https://codeload.github.com/openagen/zeroclaw/tar.gz/da684b79113547734816fee577351229d1c41097",
+      cargoPackage: "zeroclaw",
+      gitRef: "da684b79113547734816fee577351229d1c41097",
       binaryRelativePath: "bin/zeroclaw"
     },
     {
       platform: "darwin-x64",
       version: "main",
-      sourceUrl: "https://codeload.github.com/openagen/zeroclaw/tar.gz/refs/heads/main",
+      sourceUrl:
+        "https://codeload.github.com/openagen/zeroclaw/tar.gz/da684b79113547734816fee577351229d1c41097",
       cargoPackage: "zeroclaw",
-      gitRef: "main",
+      gitRef: "da684b79113547734816fee577351229d1c41097",
       binaryRelativePath: "bin/zeroclaw"
     }
   ]
