@@ -1,0 +1,68 @@
+key: core-automation
+name: Core Automation
+description: Automation-oriented suite for reliability, safety gates, and reproducibility.
+tags: [automation, core]
+tasks:
+  - key: automation-easy-1
+    name: Run retention sweep
+    tier: easy
+    prompt: Run retention cleanup and summarize deleted records.
+    expectedArtifacts:
+      - path: src/main/harness/retention.ts
+        required: false
+  - key: automation-easy-2
+    name: Export trace bundle
+    tier: easy
+    prompt: Export a redacted trace bundle for one run.
+    expectedArtifacts:
+      - path: src/main/harness/trace-export.ts
+        required: false
+  - key: automation-easy-3
+    name: Capture metric snapshot
+    tier: easy
+    prompt: Capture latest harness summary snapshot.
+    expectedArtifacts:
+      - path: src/main/db/harness-metrics.ts
+        required: false
+  - key: automation-medium-1
+    name: Queue finding review
+    tier: medium
+    prompt: Transition finding status through human review states.
+    expectedArtifacts:
+      - path: src/main/db/harness-findings.ts
+        required: false
+  - key: automation-medium-2
+    name: Trigger experiment run
+    tier: medium
+    prompt: Execute experiment matrix and produce decision report.
+    expectedArtifacts:
+      - path: src/main/harness/experiment-runner.ts
+        required: false
+  - key: automation-medium-3
+    name: Emit stop reason telemetry
+    tier: medium
+    prompt: Emit runtime stop reason event into timeline.
+    expectedArtifacts:
+      - path: src/main/agent/middleware/stop-reason.ts
+        required: false
+  - key: automation-hard-1
+    name: Enforce promotion approval gate
+    tier: hard
+    prompt: Require human approval before promotion persist.
+    expectedArtifacts:
+      - path: src/main/ipc/harness.ts
+        required: false
+  - key: automation-hard-2
+    name: Run loop-protection middleware
+    tier: hard
+    prompt: Detect repeated tool loops and escalate stop reason.
+    expectedArtifacts:
+      - path: src/main/agent/middleware/loop-detection.ts
+        required: false
+  - key: automation-hard-3
+    name: Apply budget limits
+    tier: hard
+    prompt: Enforce adaptive budget limits and emit warnings.
+    expectedArtifacts:
+      - path: src/main/agent/middleware/budget-controller.ts
+        required: false

@@ -1,0 +1,105 @@
+key: core-coding
+name: Core Coding
+description: Deterministic coding suite for implementation correctness and verification quality.
+tags: [coding, core, balanced]
+profiles:
+  - key: coding-fast
+    name: Coding Fast
+    correctnessWeight: 0.35
+    completenessWeight: 0.2
+    safetyComplianceWeight: 0.2
+    efficiencyWeight: 0.15
+    toolHygieneWeight: 0.1
+    maxDurationMs: 360000
+    maxToolCalls: 60
+    maxTokens: 16000
+tasks:
+  - key: coding-easy-1
+    name: Parse config defaults
+    tier: easy
+    prompt: Implement default config parser with schema fallback.
+    expectedArtifacts:
+      - path: package.json
+        required: true
+        mustContain: ["openwork-atlas"]
+  - key: coding-easy-2
+    name: Add typed contract
+    tier: easy
+    prompt: Add strong typing for API payload model.
+    expectedArtifacts:
+      - path: src/main/types.ts
+        required: true
+        mustContain: ["interface"]
+  - key: coding-easy-3
+    name: Add migration table
+    tier: easy
+    prompt: Add SQL migration for feature table.
+    expectedArtifacts:
+      - path: src/main/db/migrations/index.ts
+        required: true
+        mustContain: ["migration"]
+  - key: coding-easy-4
+    name: IPC parameter validation
+    tier: easy
+    prompt: Validate IPC object payload before execution.
+    expectedArtifacts:
+      - path: src/main/ipc/agent.ts
+        required: true
+        mustContain: ["Invalid"]
+  - key: coding-medium-1
+    name: Runtime middleware chain
+    tier: medium
+    prompt: Insert middleware chain and preserve policy-first ordering.
+    expectedArtifacts:
+      - path: src/main/agent/runtime.ts
+        required: true
+        mustContain: ["middleware"]
+  - key: coding-medium-2
+    name: Trace normalization
+    tier: medium
+    prompt: Normalize trace node and edge structures.
+    expectedArtifacts:
+      - path: src/main/harness/trace-types.ts
+        required: false
+  - key: coding-medium-3
+    name: Score aggregation
+    tier: medium
+    prompt: Aggregate weighted scoring from rubric dimensions.
+    expectedArtifacts:
+      - path: src/main/harness/scoring.ts
+        required: false
+  - key: coding-medium-4
+    name: Experiment delta report
+    tier: medium
+    prompt: Compute per-variant score and safety deltas.
+    expectedArtifacts:
+      - path: src/main/harness/experiment-runner.ts
+        required: false
+  - key: coding-hard-1
+    name: Parallel analyzer synthesis
+    tier: hard
+    prompt: Run batched failure analysis with synthesis.
+    expectedArtifacts:
+      - path: src/main/harness/trace-analyzer.ts
+        required: false
+  - key: coding-hard-2
+    name: Promotion guardrails
+    tier: hard
+    prompt: Enforce promotion constraints with no safety regressions.
+    expectedArtifacts:
+      - path: src/main/harness/promotion-policy.ts
+        required: false
+  - key: coding-hard-3
+    name: Retention sweeper
+    tier: hard
+    prompt: Sweep expired raw trace and artifact records.
+    expectedArtifacts:
+      - path: src/main/harness/retention.ts
+        required: false
+  - key: coding-hard-4
+    name: Harness operator UI
+    tier: hard
+    prompt: Render runs/findings/experiments in one operator page.
+    expectedArtifacts:
+      - path: src/renderer/src/components/harness/HarnessView.tsx
+        required: false

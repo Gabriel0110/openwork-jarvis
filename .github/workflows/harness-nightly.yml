@@ -1,0 +1,57 @@
+name: Harness Nightly
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly-harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.0"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run full harness suites
+        run: npm run harness:run
+
+      - name: Recompute score index
+        run: npm run harness:score:recompute
+
+      - name: Resolve nightly gate mode
+        id: gate-mode
+        shell: bash
+        env:
+          HARNESS_GATE_MODE_OVERRIDE: ${{ vars.HARNESS_NIGHTLY_GATE_MODE }}
+        run: |
+          mode="soft"
+          if [ -n "${HARNESS_GATE_MODE_OVERRIDE}" ]; then
+            mode="${HARNESS_GATE_MODE_OVERRIDE}"
+          fi
+          echo "mode=${mode}" >> "$GITHUB_OUTPUT"
+          echo "Nightly harness gate mode: ${mode}"
+
+      - name: Evaluate nightly harness gate
+        env:
+          HARNESS_GATE_MODE: ${{ steps.gate-mode.outputs.mode }}
+        run: npm run harness:gate
+
+      - name: Retain recent harness artifacts
+        run: npm run harness:retention -- --days=30
+
+      - name: Upload nightly harness artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-nightly-artifacts
+          path: harness/.runs/
+          if-no-files-found: ignore

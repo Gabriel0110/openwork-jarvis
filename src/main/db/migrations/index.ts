@@ -13,6 +13,7 @@ import { migration0011AgentSkills } from "./0011-agent-skills"
 import { migration0012ToolRegistry } from "./0012-tool-registry"
 import { migration0013ZeroClawCore } from "./0013-zeroclaw-core"
 import { migration0014PromptLibrary } from "./0014-prompt-library"
+import { migration0015HarnessCore } from "./0015-harness-core"
 import type { Migration } from "./types"
 
 const MIGRATIONS: Migration[] = [
@@ -29,7 +30,8 @@ const MIGRATIONS: Migration[] = [
   migration0011AgentSkills,
   migration0012ToolRegistry,
   migration0013ZeroClawCore,
-  migration0014PromptLibrary
+  migration0014PromptLibrary,
+  migration0015HarnessCore
 ]
 
 function ensureMigrationsTable(db: SqlJsDatabase): void {

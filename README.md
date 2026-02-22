@@ -24,6 +24,7 @@ agent orchestration, policy-gated actions, and operator-focused observability.
 - Prompt repository system for reusable markdown assets (`AGENTS.md` + generic prompts), workspace/agent bindings, and conflict-safe materialization.
 - Connectors + MCP management surfaces with bundle portability, redaction-safe import/export, telemetry, and trigger simulation.
 - ZeroClaw first-class integration with managed runtime lifecycle, deployment policies, threaded chat speaker mode, and diagnostics.
+- Harness engineering surface with benchmark suites, trace exports, failure analysis, experiment promotion workflow, and CI/nightly quality signals.
 - Operator-oriented Home/Settings UX for health, approvals, scheduler/runtime status, local paths, and secure-default controls.
 
 ### Detailed Capability Additions
@@ -126,6 +127,18 @@ agent orchestration, policy-gated actions, and operator-focused observability.
 - Diagnostics filters, auto-refresh, historical pagination, and per-deployment export (`JSON` and redacted bundle).
 - Runtime version apply flow per deployment with auto-restart if running.
 
+#### Harness Engineering
+
+- First-class Harness page with run controls, run history/detail, findings review queue, experiment comparisons, and trace inspector.
+- Local-first benchmark corpus in `harness/benchmarks` covering coding/research/automation tiers.
+- Harness run persistence and analytics via dedicated DB tables (`harness_runs`, `harness_task_results`, `harness_findings`, `harness_experiment_runs`, etc.).
+- Trace normalization/export pipeline with redaction for secrets and home path fragments.
+- Parallelized trace analyzer workflow with finding/hypothesis generation and human-review state transitions.
+- Experiment + ablation orchestration with promotion policy checks and explicit human promotion approval.
+- Runtime hardening middleware for budget controls, loop detection, pre-completion checklist warnings, and stop-reason telemetry.
+- CI observe-stage harness job plus nightly harness benchmark workflow with artifact upload.
+- Novel extension contracts (N1-N7) stubbed behind feature flags (`HARNESS_N1_ENABLED` … `HARNESS_N7_ENABLED`).
+
 #### Settings, Theme, and Operator UX
 
 - Dedicated settings workspace for provider keys, default model, security defaults, and runtime storage path visibility.
@@ -167,6 +180,10 @@ Optional: copy `.env.example` to `.env` for local provider key/env overrides.
 - `npm run test:unit:watch`: Run unit tests in watch mode
 - `npm run test:smoke`: Run Playwright smoke tests (requires build output)
 - `npm run test:smoke:build`: Build then run smoke tests
+- `npm run harness:run`: Run all harness suites from `harness/benchmarks`
+- `npm run harness:run:suite -- --suite=<suite-key>`: Run a single harness suite
+- `npm run harness:score:recompute`: List/recompute stored harness run summaries from `harness/.runs`
+- `npm run harness:gate`: Evaluate harness gate mode (`HARNESS_GATE_MODE=observe|soft|hard`)
 
 ## Architecture
 

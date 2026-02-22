@@ -10,6 +10,7 @@ import { ConnectorsView } from "@/components/connectors/ConnectorsView"
 import { TemplatesView } from "@/components/templates/TemplatesView"
 import { ToolsView } from "@/components/tools/ToolsView"
 import { PromptsView } from "@/components/prompts/PromptsView"
+import { HarnessView } from "@/components/harness/HarnessView"
 import { ZeroClawView } from "@/components/zeroclaw/ZeroClawView"
 import { SettingsView } from "@/components/settings/SettingsView"
 import { ResizeHandle } from "@/components/ui/resizable"
@@ -37,6 +38,7 @@ function App(): React.JSX.Element {
     showTemplatesView,
     showToolsView,
     showPromptsView,
+    showHarnessView,
     showZeroClawView,
     showSettingsView,
     loadAgents
@@ -187,6 +189,8 @@ function App(): React.JSX.Element {
                 </div>
               ) : showPromptsView ? (
                 <div className="h-full px-4 flex items-center text-section-header">PROMPTS</div>
+              ) : showHarnessView ? (
+                <div className="h-full px-4 flex items-center text-section-header">HARNESS</div>
               ) : showZeroClawView ? (
                 <div className="h-full px-4 flex items-center text-section-header">ZEROCLAW</div>
               ) : showSettingsView ? (
@@ -245,6 +249,10 @@ function App(): React.JSX.Element {
               <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
                 <PromptsView />
               </main>
+            ) : showHarnessView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <HarnessView />
+              </main>
             ) : showZeroClawView ? (
               <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
                 <ZeroClawView />
@@ -278,6 +286,7 @@ function App(): React.JSX.Element {
           !showTemplatesView &&
           !showToolsView &&
           !showPromptsView &&
+          !showHarnessView &&
           !showZeroClawView &&
           !showSettingsView && (
             <>

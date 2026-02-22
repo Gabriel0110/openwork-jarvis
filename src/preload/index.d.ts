@@ -6,6 +6,17 @@ import type {
   ConnectorExportBundle,
   ConnectorDefinition,
   ConnectorImportResult,
+  HarnessArtifactRecord,
+  HarnessExperimentRun,
+  HarnessExperimentSpec,
+  HarnessFinding,
+  HarnessGateReport,
+  HarnessMetricSummary,
+  HarnessRetentionRunResult,
+  HarnessRun,
+  HarnessSuiteSpec,
+  HarnessTaskResult,
+  HarnessTraceExport,
   GraphLayoutEntry,
   HITLDecision,
   McpServerDefinition,
@@ -325,6 +336,93 @@ interface CustomAPI {
       workspaceId?: string
       workspaceRoot?: string
     }) => Promise<PromptBootstrapCheckResult>
+  }
+  harness: {
+    isEnabled: () => Promise<{ enabled: boolean }>
+    suites: {
+      list: () => Promise<{ suites: HarnessSuiteSpec[]; experimentSpecs: HarnessExperimentSpec[] }>
+    }
+    runs: {
+      start: (params: {
+        suiteKey: string
+        workspaceId?: string
+        workspacePath?: string
+        profileKey?: string
+        modelId?: string
+        executionMode?: "local" | "matrix"
+        taskExecutionMode?: "live" | "synthetic"
+        seed?: number
+        variantConfig?: {
+          variantKey?: string
+          variantLabel?: string
+          promptPatch?: string
+          middleware?: Record<string, unknown>
+          budget?: {
+            maxDurationMs?: number
+            maxToolCalls?: number
+            maxTokens?: number
+          }
+        }
+      }) => Promise<HarnessRun>
+      list: (filters?: {
+        status?: HarnessRun["status"]
+        suiteKey?: string
+        workspaceId?: string
+        limit?: number
+      }) => Promise<HarnessRun[]>
+      get: (runId: string) => Promise<{
+        run: HarnessRun
+        tasks: HarnessTaskResult[]
+        artifacts: HarnessArtifactRecord[]
+      }>
+      cancel: (runId: string) => Promise<HarnessRun>
+      getArtifacts: (runId: string, taskKey?: string) => Promise<HarnessArtifactRecord[]>
+    }
+    traces: {
+      export: (params: {
+        runId: string
+        taskKey?: string
+        format?: "json" | "jsonl" | "summary"
+      }) => Promise<HarnessTraceExport>
+    }
+    findings: {
+      list: (filters?: {
+        runId?: string
+        status?: "pending_review" | "approved" | "rejected" | "queued_for_experiment"
+        severity?: "low" | "medium" | "high" | "critical"
+        limit?: number
+      }) => Promise<HarnessFinding[]>
+      review: (
+        findingId: string,
+        decision: "approved" | "rejected" | "queued_for_experiment",
+        notes?: string,
+        reviewer?: string
+      ) => Promise<HarnessFinding>
+      analyzeRun: (runId: string) => Promise<{ findings: HarnessFinding[] }>
+    }
+    experiments: {
+      run: (specIdOrInlineSpec: string | HarnessExperimentSpec) => Promise<HarnessExperimentRun>
+      list: (filters?: {
+        status?: HarnessExperimentRun["status"]
+        limit?: number
+      }) => Promise<HarnessExperimentRun[]>
+      get: (experimentRunId: string) => Promise<HarnessExperimentRun>
+      promote: (
+        experimentRunId: string,
+        approvedBy: string,
+        notes?: string
+      ) => Promise<HarnessExperimentRun>
+    }
+    metrics: {
+      summary: (windowMs?: number) => Promise<{
+        summary: HarnessMetricSummary
+        gateReports: HarnessGateReport[]
+        novel: Array<{ feature: string; enabled: boolean; status: string; message: string }>
+      }>
+    }
+    retention: {
+      runNow: () => Promise<HarnessRetentionRunResult>
+    }
   }
   connectors: {
     list: (workspaceId?: string) => Promise<ConnectorDefinition[]>

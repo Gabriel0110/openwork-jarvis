@@ -52,3 +52,47 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  harness-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.0"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run harness subset
+        run: npm run harness:run:suite -- --suite=core-coding
+
+      - name: Resolve harness gate mode
+        id: gate-mode
+        shell: bash
+        env:
+          HARNESS_GATE_MODE_OVERRIDE: ${{ vars.HARNESS_GATE_MODE_OVERRIDE }}
+        run: |
+          mode="observe"
+          if [ -n "${HARNESS_GATE_MODE_OVERRIDE}" ]; then
+            mode="${HARNESS_GATE_MODE_OVERRIDE}"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            mode="soft"
+          fi
+          echo "mode=${mode}" >> "$GITHUB_OUTPUT"
+          echo "Harness gate mode: ${mode}"
+
+      - name: Evaluate harness gate
+        env:
+          HARNESS_GATE_MODE: ${{ steps.gate-mode.outputs.mode }}
+        run: npm run harness:gate
+
+      - name: Upload harness artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-gate-artifacts
+          path: harness/.runs/
+          if-no-files-found: ignore

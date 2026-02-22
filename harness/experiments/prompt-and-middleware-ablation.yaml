@@ -1,0 +1,20 @@
+key: prompt-and-middleware-ablation
+name: Prompt + Middleware Ablation
+suiteKey: core-coding
+profileKey: default-baseline
+sampleSize: 1
+retryCount: 0
+minPrimaryDelta: 1.5
+maxSafetyRegression: 1.0
+maxCatastrophicDrop: 8.0
+variants:
+  - key: prompt-contract-v2
+    label: Prompt Contract v2
+    promptPatch: Add stronger output contract and verification checklist.
+  - key: tighter-loop-detection
+    label: Tighter Loop Detection
+    maxToolCalls: 90
+  - key: budget-adjusted
+    label: Budget Adjusted
+    maxDurationMs: 600000
+    maxTokens: 26000

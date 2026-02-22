@@ -178,6 +178,327 @@ export interface PromptPack {
   }
 }
 
+export type HarnessRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled"
+export type HarnessTaskStatus = "queued" | "running" | "passed" | "failed" | "cancelled"
+export type HarnessTaskTier = "easy" | "medium" | "hard"
+export type HarnessFindingSeverity = "low" | "medium" | "high" | "critical"
+export type HarnessFindingStatus =
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "queued_for_experiment"
+export type HarnessExperimentStatus = "queued" | "running" | "completed" | "failed" | "cancelled"
+export type HarnessTaskExecutionMode = "live" | "synthetic"
+
+export interface HarnessScoreBreakdown {
+  correctness: number
+  completeness: number
+  safetyCompliance: number
+  efficiency: number
+  toolHygiene: number
+  weightedTotal: number
+}
+
+export interface HarnessRunSummary {
+  taskCount: number
+  passedCount: number
+  failedCount: number
+  averageScore: number
+  scoreByTier: Record<HarnessTaskTier, number>
+  stopReasons: Record<string, number>
+}
+
+export interface HarnessRun {
+  id: string
+  workspaceId: string
+  suiteKey: string
+  suiteName: string
+  profileKey: string
+  status: HarnessRunStatus
+  modelProfile?: string
+  executionMode: "local" | "matrix" | "live" | "synthetic"
+  seed?: number
+  startedAt?: Date
+  completedAt?: Date
+  durationMs?: number
+  summary: HarnessRunSummary
+  errorText?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface HarnessTaskResult {
+  id: string
+  runId: string
+  taskKey: string
+  taskName: string
+  taskTier: HarnessTaskTier
+  status: HarnessTaskStatus
+  threadId?: string
+  scoreTotal: number
+  scoreBreakdown: HarnessScoreBreakdown
+  durationMs: number
+  tokenUsage: number
+  toolCalls: number
+  costUsd: number
+  stopReason?: string
+  notes?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface HarnessArtifactRecord {
+  id: string
+  runId: string
+  taskKey: string
+  artifactType: string
+  artifactPath?: string
+  artifactHash?: string
+  payload: Record<string, unknown>
+  retentionTtlDays: number
+  createdAt: Date
+}
+
+export interface HarnessTraceNode {
+  id: string
+  type:
+    | "run"
+    | "task"
+    | "timeline_event"
+    | "tool_call"
+    | "approval"
+    | "subagent"
+    | "artifact"
+    | "stop_reason"
+  label: string
+  timestamp: string
+  data: Record<string, unknown>
+}
+
+export interface HarnessTraceEdge {
+  id: string
+  from: string
+  to: string
+  type: "contains" | "calls" | "emits" | "depends_on" | "blocked_by" | "produced"
+}
+
+export interface HarnessTraceExport {
+  id: string
+  runId: string
+  taskKey?: string
+  format: "json" | "jsonl" | "summary"
+  serialized?: string
+  summary: {
+    nodeCount: number
+    edgeCount: number
+    generatedAt: string
+    redactionVersion: string
+  }
+  nodes: HarnessTraceNode[]
+  edges: HarnessTraceEdge[]
+  events: Array<Record<string, unknown>>
+  createdAt: Date
+}
+
+export interface HarnessHypothesis {
+  id: string
+  findingId: string
+  runId: string
+  title: string
+  summary: string
+  interventionType: string
+  interventionPayload: Record<string, unknown>
+  confidence: number
+  rank: number
+  createdAt: Date
+}
+
+export interface HarnessFinding {
+  id: string
+  runId: string
+  taskKey?: string
+  fingerprint: string
+  category:
+    | "spec_non_compliance"
+    | "missing_verification"
+    | "tool_misuse"
+    | "loop_or_stall"
+    | "policy_friction"
+    | "budget_misallocation"
+    | "output_contract_failure"
+  severity: HarnessFindingSeverity
+  status: HarnessFindingStatus
+  title: string
+  summary: string
+  evidence: Array<{ nodeId?: string; description: string }>
+  confidence: number
+  intervention: Record<string, unknown>
+  reviewerNotes?: string
+  reviewedBy?: string
+  reviewedAt?: Date
+  createdAt: Date
+  updatedAt: Date
+  hypotheses?: HarnessHypothesis[]
+}
+
+export interface HarnessVariantResult {
+  variantKey: string
+  variantLabel: string
+  isBaseline: boolean
+  runId?: string
+  runIds?: string[]
+  sampleCount?: number
+  retriesUsed?: number
+  failedRunCount?: number
+  averageScore: number
+  scoreDelta: number
+  latencyDeltaMs: number
+  costDeltaUsd: number
+  toolCallDelta: number
+  safetyDelta: number
+  summary: Record<string, unknown>
+}
+
+export interface HarnessPromotionDecision {
+  recommendPromotion: boolean
+  primaryMetric: "average_score"
+  primaryDelta: number
+  threshold: number
+  safetyRegression: boolean
+  catastrophicRegression: boolean
+  reasons: string[]
+}
+
+export interface HarnessExperimentSpec {
+  key: string
+  name: string
+  description?: string
+  suiteKey: string
+  profileKey?: string
+  sampleSize: number
+  retryCount: number
+  gating: {
+    minPrimaryDelta: number
+    maxSafetyRegression: number
+    maxCatastrophicDrop: number
+  }
+  variants: Array<{
+    key: string
+    label: string
+    promptPatch?: string
+    middleware?: Record<string, unknown>
+    budget?: {
+      maxDurationMs?: number
+      maxToolCalls?: number
+      maxTokens?: number
+    }
+    modelId?: string
+  }>
+}
+
+export interface HarnessExperimentRun {
+  id: string
+  specKey: string
+  baselineSuiteKey: string
+  status: HarnessExperimentStatus
+  startedAt?: Date
+  completedAt?: Date
+  variants: HarnessVariantResult[]
+  report?: Record<string, unknown>
+  promotionDecision: HarnessPromotionDecision
+  approvedBy?: string
+  approvedAt?: Date
+  notes?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface HarnessGateSummary {
+  id: string
+  targetRef: string
+  stage: "observe" | "soft_gate" | "hard_gate"
+  status: "pass" | "warn" | "fail"
+  summary: Record<string, unknown>
+  createdAt: Date
+}
+
+export interface HarnessMetricSummary {
+  totalRuns: number
+  activeRuns: number
+  queuedRuns: number
+  completedRuns: number
+  failedRuns: number
+  completionRate: number
+  averageScore: number
+  averageFailedTasksPerRun: number
+  pendingApprovals: number
+  totalFindings: number
+  approvedFindings: number
+  rejectedFindings: number
+  queuedForExperimentFindings: number
+  approvalLatencyP50Ms: number
+  approvalLatencyP95Ms: number
+  approveRatio: number
+  rejectRatio: number
+  editRatio: number
+  policyDeniedCount: number
+  blockedRunCount: number
+  updatedAt: string
+}
+
+export interface HarnessTaskSpec {
+  key: string
+  name: string
+  description?: string
+  tier: HarnessTaskTier
+  prompt: string
+  fixturePath?: string
+  expectedArtifacts?: Array<{
+    path: string
+    required?: boolean
+    mustContain?: string[]
+  }>
+  tags?: string[]
+  maxDurationMs?: number
+  maxToolCalls?: number
+  maxTokens?: number
+}
+
+export interface HarnessSuiteSpec {
+  key: string
+  name: string
+  description?: string
+  tags?: string[]
+  tasks: HarnessTaskSpec[]
+}
+
+export interface HarnessRunListItem {
+  id: string
+  suiteKey: string
+  profileKey: string
+  status: HarnessRunStatus
+  createdAt: Date
+  durationMs?: number
+  averageScore: number
+}
+
+export interface HarnessRunDetail {
+  run: HarnessRun
+  tasks: HarnessTaskResult[]
+  artifacts: HarnessArtifactRecord[]
+}
+
+export interface HarnessFindingReviewItem {
+  finding: HarnessFinding
+  run?: HarnessRun
+}
+
+export interface HarnessExperimentCompareView {
+  experiment: HarnessExperimentRun
+  baseline?: HarnessVariantResult
+  variants: HarnessVariantResult[]
+}
+
 export type PolicyResourceType = "tool" | "connector" | "network" | "filesystem"
 export type PolicyAction = "read" | "write" | "exec" | "post"
 export type PolicyScope = "global" | "workspace" | "session"

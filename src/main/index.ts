@@ -16,6 +16,7 @@ import { registerToolHandlers } from "./ipc/tools"
 import { registerPromptHandlers } from "./ipc/prompts"
 import { registerTerminalHandlers } from "./ipc/terminal"
 import { registerZeroClawHandlers } from "./ipc/zeroclaw"
+import { registerHarnessHandlers } from "./ipc/harness"
 import { closeDatabase, initializeDatabase } from "./db"
 import { startTemplateScheduler, stopTemplateScheduler } from "./services/template-scheduler"
 import { getThreadTerminalManager } from "./services/thread-terminal-manager"
@@ -113,6 +114,7 @@ app.whenReady().then(async () => {
   registerSkillHandlers(ipcMain)
   registerToolHandlers(ipcMain)
   registerPromptHandlers(ipcMain)
+  registerHarnessHandlers(ipcMain)
   registerTerminalHandlers(ipcMain)
   registerZeroClawHandlers(ipcMain)
   registerThreadHandlers(ipcMain)

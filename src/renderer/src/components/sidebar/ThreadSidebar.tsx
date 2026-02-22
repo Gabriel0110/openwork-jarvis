@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Plus,
   MessageSquare,
@@ -13,6 +13,7 @@ import {
   Plug,
   FileStack,
   Wrench,
+  FlaskConical,
   BookText,
   Bot,
   Settings2
@@ -209,6 +210,7 @@ export function ThreadSidebar(): React.JSX.Element {
     setShowConnectorsView,
     setShowToolsView,
     setShowPromptsView,
+    setShowHarnessView,
     setShowZeroClawView,
     setShowSettingsView,
     setShowTemplatesView
@@ -218,6 +220,28 @@ export function ThreadSidebar(): React.JSX.Element {
   const [editingTitle, setEditingTitle] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [filterMode, setFilterMode] = useState<ThreadFilterMode>("all")
+  const [harnessEnabled, setHarnessEnabled] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    window.api.harness
+      .isEnabled()
+      .then((result) => {
+        if (!mounted) {
+          return
+        }
+        setHarnessEnabled(result.enabled)
+      })
+      .catch(() => {
+        if (!mounted) {
+          return
+        }
+        setHarnessEnabled(true)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const normalizedQuery = searchQuery.trim().toLowerCase()
   const visibleThreads = threads.filter((thread) => {
@@ -425,6 +449,17 @@ export function ThreadSidebar(): React.JSX.Element {
           <BookText className="size-4" />
           Prompts
         </Button>
+        {harnessEnabled && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 mt-1"
+            onClick={() => setShowHarnessView(true)}
+          >
+            <FlaskConical className="size-4" />
+            Harness
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

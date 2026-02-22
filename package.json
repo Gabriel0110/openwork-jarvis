@@ -48,6 +48,11 @@
     "test:unit:watch": "vitest",
     "test:smoke": "playwright test",
     "test:smoke:build": "npm run build && npm run test:smoke",
+    "harness:run": "node scripts/harness-cli.mjs run",
+    "harness:run:suite": "node scripts/harness-cli.mjs run-suite",
+    "harness:score:recompute": "node scripts/harness-cli.mjs score-recompute",
+    "harness:retention": "node scripts/harness-cli.mjs retention",
+    "harness:gate": "node scripts/harness-gate.mjs",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build"

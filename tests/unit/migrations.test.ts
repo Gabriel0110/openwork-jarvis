@@ -142,6 +142,46 @@ describe("database migrations", () => {
       db,
       "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'prompt_materializations'"
     )
+    const harnessRunsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_runs'"
+    )
+    const harnessTaskResultsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_task_results'"
+    )
+    const harnessArtifactsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_artifacts'"
+    )
+    const harnessTraceExportsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_trace_exports'"
+    )
+    const harnessFindingsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_findings'"
+    )
+    const harnessHypothesesTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_hypotheses'"
+    )
+    const harnessExperimentRunsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_experiment_runs'"
+    )
+    const harnessExperimentVariantsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_experiment_variants'"
+    )
+    const harnessGateReportsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_gate_reports'"
+    )
+    const harnessMetricSnapshotsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'harness_metric_snapshots'"
+    )
     const migrationCount = getSingleNumber(db, "SELECT COUNT(*) FROM schema_migrations")
     const hasTemplateScheduleColumn = hasColumn(db, "workflow_templates", "schedule_config")
     const hasTemplateTriggerColumn = hasColumn(db, "workflow_templates", "trigger_config")
@@ -173,6 +213,16 @@ describe("database migrations", () => {
     expect(promptAssetsTableCount).toBe(1)
     expect(promptBindingsTableCount).toBe(1)
     expect(promptMaterializationsTableCount).toBe(1)
+    expect(harnessRunsTableCount).toBe(1)
+    expect(harnessTaskResultsTableCount).toBe(1)
+    expect(harnessArtifactsTableCount).toBe(1)
+    expect(harnessTraceExportsTableCount).toBe(1)
+    expect(harnessFindingsTableCount).toBe(1)
+    expect(harnessHypothesesTableCount).toBe(1)
+    expect(harnessExperimentRunsTableCount).toBe(1)
+    expect(harnessExperimentVariantsTableCount).toBe(1)
+    expect(harnessGateReportsTableCount).toBe(1)
+    expect(harnessMetricSnapshotsTableCount).toBe(1)
     expect(hasTemplateScheduleColumn).toBe(true)
     expect(hasTemplateTriggerColumn).toBe(true)
     expect(hasMemoryLockedColumn).toBe(true)
@@ -180,6 +230,6 @@ describe("database migrations", () => {
     expect(hasAgentSkillsAllowlistColumn).toBe(true)
     expect(hasToolSourceColumn).toBe(true)
     expect(hasToolImplementationColumn).toBe(true)
-    expect(migrationCount).toBe(14)
+    expect(migrationCount).toBe(15)
   })
 })

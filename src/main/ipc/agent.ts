@@ -1,4 +1,4 @@
-import { IpcMain, BrowserWindow } from "electron"
+import { IpcMain, IpcMainEvent, IpcMainInvokeEvent, BrowserWindow } from "electron"
 import { HumanMessage } from "@langchain/core/messages"
 import { Command, type StreamMode } from "@langchain/langgraph"
 import { createAgentRuntime } from "../agent/runtime"
@@ -605,511 +605,669 @@ async function invokeZeroClawSpeaker(
 // Track active runs for cancellation
 const activeRuns = new Map<string, AbortController>()
 
+function requireObject(value: unknown, errorMessage: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(errorMessage)
+  }
+  return value as Record<string, unknown>
+}
+
+function requireString(value: unknown, fieldName: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`Invalid ${fieldName}: expected non-empty string.`)
+  }
+  return value.trim()
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined
+}
+
+function optionalSpeakerType(value: unknown): "orchestrator" | "agent" | "zeroclaw" | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined
+  }
+  if (value === "orchestrator" || value === "agent" || value === "zeroclaw") {
+    return value
+  }
+  throw new Error("Invalid speakerType: expected orchestrator, agent, or zeroclaw.")
+}
+
+function parseAgentInvokeParams(payload: unknown): AgentInvokeParams {
+  const record = requireObject(payload, "Invalid agent invoke payload.")
+  return {
+    threadId: requireString(record.threadId, "threadId"),
+    message: requireString(record.message, "message"),
+    modelId: optionalString(record.modelId),
+    speakerType: optionalSpeakerType(record.speakerType),
+    speakerAgentId: optionalString(record.speakerAgentId)
+  }
+}
+
+function parseAgentResumeParams(payload: unknown): AgentResumeParams {
+  const record = requireObject(payload, "Invalid agent resume payload.")
+  const commandValue = record.command
+  if (
+    commandValue !== undefined &&
+    commandValue !== null &&
+    (typeof commandValue !== "object" || Array.isArray(commandValue))
+  ) {
+    throw new Error("Invalid command: expected object payload.")
+  }
+
+  return {
+    threadId: requireString(record.threadId, "threadId"),
+    command:
+      commandValue && typeof commandValue === "object" && !Array.isArray(commandValue)
+        ? (commandValue as AgentResumeParams["command"])
+        : {},
+    modelId: optionalString(record.modelId),
+    speakerType: optionalSpeakerType(record.speakerType),
+    speakerAgentId: optionalString(record.speakerAgentId)
+  }
+}
+
+function parseAgentInterruptParams(payload: unknown): AgentInterruptParams {
+  const record = requireObject(payload, "Invalid agent interrupt payload.")
+  const decision = requireObject(record.decision, "Invalid decision: expected object payload.")
+  const decisionType = requireString(decision.type, "decision.type")
+  if (decisionType !== "approve" && decisionType !== "reject" && decisionType !== "edit") {
+    throw new Error("Invalid decision.type: expected approve, reject, or edit.")
+  }
+
+  return {
+    threadId: requireString(record.threadId, "threadId"),
+    decision: {
+      type: decisionType,
+      tool_call_id: requireString(decision.tool_call_id, "decision.tool_call_id"),
+      edited_args:
+        decision.edited_args && typeof decision.edited_args === "object"
+          ? (decision.edited_args as Record<string, unknown>)
+          : undefined,
+      feedback: optionalString(decision.feedback)
+    }
+  }
+}
+
+function parseAgentCancelParams(payload: unknown): AgentCancelParams {
+  const record = requireObject(payload, "Invalid agent cancel payload.")
+  return {
+    threadId: requireString(record.threadId, "threadId")
+  }
+}
+
+function extractThreadId(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return undefined
+  }
+  const raw = (payload as Record<string, unknown>).threadId
+  if (typeof raw !== "string") {
+    return undefined
+  }
+  const trimmed = raw.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function sendValidationError(
+  event: IpcMainEvent | IpcMainInvokeEvent,
+  payload: unknown,
+  errorMessage: string
+): void {
+  const window = BrowserWindow.fromWebContents(event.sender)
+  const threadId = extractThreadId(payload)
+  if (window && threadId) {
+    window.webContents.send(`agent:stream:${threadId}`, {
+      type: "error",
+      error: errorMessage
+    })
+  }
+}
+
 export function registerAgentHandlers(ipcMain: IpcMain): void {
   console.log("[Agent] Registering agent handlers...")
 
   // Handle agent invocation with streaming
-  ipcMain.on(
-    "agent:invoke",
-    async (
-      event,
-      { threadId, message, modelId, speakerType, speakerAgentId }: AgentInvokeParams
-    ) => {
-      const channel = `agent:stream:${threadId}`
-      const window = BrowserWindow.fromWebContents(event.sender)
-
-      console.log("[Agent] Received invoke request:", {
-        threadId,
-        message: message.substring(0, 50),
-        modelId,
-        speakerType,
-        speakerAgentId
-      })
-
-      if (!window) {
-        console.error("[Agent] No window found")
-        return
-      }
-
-      // Abort any existing stream for this thread before starting a new one
-      // This prevents concurrent streams which can cause checkpoint corruption
-      const existingController = activeRuns.get(threadId)
-      if (existingController) {
-        console.log("[Agent] Aborting existing stream for thread:", threadId)
-        existingController.abort()
-        activeRuns.delete(threadId)
-      }
-
-      const abortController = new AbortController()
-      activeRuns.set(threadId, abortController)
-
-      // Abort the stream if the window is closed/destroyed
-      const onWindowClosed = (): void => {
-        console.log("[Agent] Window closed, aborting stream for thread:", threadId)
-        abortController.abort()
-      }
-      window.once("closed", onWindowClosed)
-      let workspaceIdForTimeline = DEFAULT_WORKSPACE_ID
-
-      try {
-        // Get workspace path from thread metadata - REQUIRED
-        const thread = getThread(threadId)
-        const metadata = thread?.metadata ? JSON.parse(thread.metadata) : {}
-        console.log("[Agent] Thread metadata:", metadata)
-
-        const workspacePath = metadata.workspacePath as string | undefined
-        const workspaceId = (metadata.workspaceId as string | undefined) || DEFAULT_WORKSPACE_ID
-        workspaceIdForTimeline = workspaceId
-
-        if (!workspacePath) {
-          window.webContents.send(channel, {
-            type: "error",
-            error: "WORKSPACE_REQUIRED",
-            message: "Please select a workspace folder before sending messages."
-          })
-          return
-        }
-
-        if (speakerType === "zeroclaw") {
-          const deploymentId = speakerAgentId?.trim()
-          if (!deploymentId) {
-            window.webContents.send(channel, {
-              type: "error",
-              error: "ZEROCLAW_DEPLOYMENT_REQUIRED",
-              message: "Select a ZeroClaw deployment before sending messages."
-            })
-            return
-          }
-
-          appendPersistedThreadMessages(threadId, [
-            {
-              id: crypto.randomUUID(),
-              role: "user",
-              content: message,
-              created_at: new Date().toISOString()
-            }
-          ])
-
-          writeTimelineEventSafe({
-            threadId,
-            workspaceId,
-            eventType: "user_message",
-            summary: trimSummary(message),
-            payload: {
-              speakerType: "zeroclaw",
-              deploymentId
-            }
-          })
-
-          const messageId = crypto.randomUUID()
-          const result = await invokeZeroClawSpeaker(
-            deploymentId,
-            message,
-            abortController.signal,
-            (token) => {
-              if (abortController.signal.aborted || !token) {
-                return
-              }
-              window.webContents.send(channel, {
-                type: "token",
-                messageId,
-                token
-              })
-            }
-          )
-          if (!abortController.signal.aborted) {
-            window.webContents.send(channel, { type: "done" })
-          }
-
-          appendPersistedThreadMessages(threadId, [
-            {
-              id: messageId,
-              role: "assistant",
-              content: result.response,
-              created_at: new Date().toISOString()
-            }
-          ])
-
-          writeTimelineEventSafe({
-            threadId,
-            workspaceId,
-            eventType: "tool_result",
-            summary: trimSummary(`ZeroClaw (${result.deploymentName}): ${result.response}`),
-            toolName: "zeroclaw:webhook",
-            payload: {
-              speakerType: "zeroclaw",
-              deploymentId,
-              model: result.model,
-              streamed: result.streamed,
-              transport: result.transport,
-              tokenChunks: result.tokenChunks,
-              syntheticFallbackUsed: result.syntheticFallbackUsed,
-              durationMs: result.durationMs,
-              attemptCount: result.attemptCount,
-              pairingRecovered: result.pairingRecovered
-            }
-          })
-          return
-        }
-
-        const speaker = resolveSpeaker(workspaceId, speakerType, speakerAgentId)
-        writeTimelineEventSafe({
-          threadId,
-          workspaceId,
-          eventType: "user_message",
-          sourceAgentId: speaker?.id,
-          summary: trimSummary(message),
-          payload: {
-            speakerType: speaker?.type || "orchestrator"
-          }
-        })
-        const resolvedModelId = modelId || speaker?.modelName
-        const agent = await createAgentRuntime({
-          threadId,
-          workspacePath,
-          workspaceId,
-          modelId: resolvedModelId,
-          speaker
-        })
-        const humanMessage = new HumanMessage(message)
-
-        // Stream with both modes:
-        // - 'messages' for real-time token streaming
-        // - 'values' for full state (todos, files, etc.)
-        const stream = await agent.stream(
-          { messages: [humanMessage] },
-          {
-            configurable: { thread_id: threadId },
-            signal: abortController.signal,
-            streamMode: ["messages", "values"],
-            recursionLimit: 1000
-          }
-        )
-
-        for await (const chunk of stream) {
-          if (abortController.signal.aborted) break
-
-          // With multiple stream modes, chunks are tuples: [mode, data]
-          const [mode, data] = chunk as [string, unknown]
-          const serialized = JSON.parse(JSON.stringify(data))
-
-          persistStreamTimelineEvents({
-            threadId,
-            workspaceId,
-            mode,
-            data: serialized,
-            speaker
-          })
-
-          // Forward raw stream events - transport layer handles parsing
-          // Serialize to plain objects for IPC (class instances don't transfer)
-          window.webContents.send(channel, {
-            type: "stream",
-            mode,
-            data: serialized
-          })
-        }
-
-        // Send done event (only if not aborted)
-        if (!abortController.signal.aborted) {
-          window.webContents.send(channel, { type: "done" })
-        }
-      } catch (error) {
-        // Ignore abort-related errors (expected when stream is cancelled)
-        const isAbortError =
-          error instanceof Error &&
-          (error.name === "AbortError" ||
-            error.message.includes("aborted") ||
-            error.message.includes("Controller is already closed"))
-
-        if (!isAbortError) {
-          console.error("[Agent] Error:", error)
-          const errorMessage =
-            error instanceof Error ? trimSummary(error.message) : "Unknown stream error"
-          const zeroClawDeploymentId =
-            speakerType === "zeroclaw" && typeof speakerAgentId === "string"
-              ? speakerAgentId.trim()
-              : ""
-          const zeroClawPayload =
-            zeroClawDeploymentId.length > 0
-              ? {
-                  speakerType: "zeroclaw",
-                  deploymentId: zeroClawDeploymentId,
-                  streamed: false,
-                  hasError: true,
-                  errorMessage
-                }
-              : undefined
-          writeTimelineEventSafe({
-            threadId,
-            workspaceId: workspaceIdForTimeline,
-            eventType: "error",
-            summary: errorMessage,
-            toolName: zeroClawPayload ? "zeroclaw:webhook" : undefined,
-            payload: zeroClawPayload
-          })
-          window.webContents.send(channel, {
-            type: "error",
-            error: error instanceof Error ? error.message : "Unknown error"
-          })
-        }
-      } finally {
-        window.removeListener("closed", onWindowClosed)
-        activeRuns.delete(threadId)
-      }
+  ipcMain.on("agent:invoke", async (event, payload: unknown) => {
+    let threadId = ""
+    let message = ""
+    let modelId: string | undefined
+    let speakerType: "orchestrator" | "agent" | "zeroclaw" | undefined
+    let speakerAgentId: string | undefined
+    try {
+      const parsed = parseAgentInvokeParams(payload)
+      threadId = parsed.threadId
+      message = parsed.message
+      modelId = parsed.modelId
+      speakerType = parsed.speakerType
+      speakerAgentId = parsed.speakerAgentId
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : "Invalid agent invoke payload."
+      console.error("[Agent] Payload validation failed:", messageText)
+      sendValidationError(event, payload, messageText)
+      return
     }
-  )
 
-  // Handle agent resume (after interrupt approval/rejection via useStream)
-  ipcMain.on(
-    "agent:resume",
-    async (
-      event,
-      { threadId, command, modelId, speakerType, speakerAgentId }: AgentResumeParams
-    ) => {
-      const channel = `agent:stream:${threadId}`
-      const window = BrowserWindow.fromWebContents(event.sender)
+    const channel = `agent:stream:${threadId}`
+    const window = BrowserWindow.fromWebContents(event.sender)
 
-      console.log("[Agent] Received resume request:", {
-        threadId,
-        command,
-        modelId,
-        speakerType,
-        speakerAgentId
-      })
+    console.log("[Agent] Received invoke request:", {
+      threadId,
+      message: message.substring(0, 50),
+      modelId,
+      speakerType,
+      speakerAgentId
+    })
 
-      if (!window) {
-        console.error("[Agent] No window found for resume")
-        return
-      }
+    if (!window) {
+      console.error("[Agent] No window found")
+      return
+    }
 
-      // Get workspace path from thread metadata
+    // Abort any existing stream for this thread before starting a new one
+    // This prevents concurrent streams which can cause checkpoint corruption
+    const existingController = activeRuns.get(threadId)
+    if (existingController) {
+      console.log("[Agent] Aborting existing stream for thread:", threadId)
+      existingController.abort()
+      activeRuns.delete(threadId)
+    }
+
+    const abortController = new AbortController()
+    activeRuns.set(threadId, abortController)
+
+    // Abort the stream if the window is closed/destroyed
+    const onWindowClosed = (): void => {
+      console.log("[Agent] Window closed, aborting stream for thread:", threadId)
+      abortController.abort()
+    }
+    window.once("closed", onWindowClosed)
+    let workspaceIdForTimeline = DEFAULT_WORKSPACE_ID
+
+    try {
+      // Get workspace path from thread metadata - REQUIRED
       const thread = getThread(threadId)
       const metadata = thread?.metadata ? JSON.parse(thread.metadata) : {}
+      console.log("[Agent] Thread metadata:", metadata)
+
       const workspacePath = metadata.workspacePath as string | undefined
       const workspaceId = (metadata.workspaceId as string | undefined) || DEFAULT_WORKSPACE_ID
-      const workspaceIdForTimeline = workspaceId
+      workspaceIdForTimeline = workspaceId
 
       if (!workspacePath) {
         window.webContents.send(channel, {
           type: "error",
-          error: "Workspace path is required"
+          error: "WORKSPACE_REQUIRED",
+          message: "Please select a workspace folder before sending messages."
         })
         return
       }
 
       if (speakerType === "zeroclaw") {
-        window.webContents.send(channel, {
-          type: "error",
-          error: "ZeroClaw speaker does not support resume commands."
+        const deploymentId = speakerAgentId?.trim()
+        if (!deploymentId) {
+          window.webContents.send(channel, {
+            type: "error",
+            error: "ZEROCLAW_DEPLOYMENT_REQUIRED",
+            message: "Select a ZeroClaw deployment before sending messages."
+          })
+          return
+        }
+
+        appendPersistedThreadMessages(threadId, [
+          {
+            id: crypto.randomUUID(),
+            role: "user",
+            content: message,
+            created_at: new Date().toISOString()
+          }
+        ])
+
+        writeTimelineEventSafe({
+          threadId,
+          workspaceId,
+          eventType: "user_message",
+          summary: trimSummary(message),
+          payload: {
+            speakerType: "zeroclaw",
+            deploymentId
+          }
         })
-        return
-      }
 
-      // Abort any existing stream before resuming
-      const existingController = activeRuns.get(threadId)
-      if (existingController) {
-        existingController.abort()
-        activeRuns.delete(threadId)
-      }
+        const messageId = crypto.randomUUID()
+        const result = await invokeZeroClawSpeaker(
+          deploymentId,
+          message,
+          abortController.signal,
+          (token) => {
+            if (abortController.signal.aborted || !token) {
+              return
+            }
+            window.webContents.send(channel, {
+              type: "token",
+              messageId,
+              token
+            })
+          }
+        )
+        if (!abortController.signal.aborted) {
+          window.webContents.send(channel, { type: "done" })
+        }
 
-      const abortController = new AbortController()
-      activeRuns.set(threadId, abortController)
-
-      try {
-        const speaker = resolveSpeaker(workspaceId, speakerType, speakerAgentId)
-        const decisionType = command?.resume?.decision || "approve"
-        const resumeToolName = command?.resume?.toolName
-        const resumeToolCallId = command?.resume?.toolCallId
-        const resumeToolArgs = command?.resume?.toolArgs as Record<string, unknown> | undefined
-        const normalizedDecisionType =
-          decisionType === "reject" || decisionType === "edit" ? decisionType : "approve"
+        appendPersistedThreadMessages(threadId, [
+          {
+            id: messageId,
+            role: "assistant",
+            content: result.response,
+            created_at: new Date().toISOString()
+          }
+        ])
 
         writeTimelineEventSafe({
           threadId,
           workspaceId,
           eventType: "tool_result",
-          sourceAgentId: speaker?.id,
-          toolName: resumeToolName || "approval:decision",
-          summary: `Approval ${normalizedDecisionType}: ${resumeToolName || "tool"}`,
-          dedupeKey: `${threadId}:approval_decision:${String(resumeToolCallId || "unknown")}:${normalizedDecisionType}`,
+          summary: trimSummary(`ZeroClaw (${result.deploymentName}): ${result.response}`),
+          toolName: "zeroclaw:webhook",
           payload: {
-            approvalDecision: normalizedDecisionType,
-            toolName: resumeToolName,
-            toolCallId: resumeToolCallId,
-            hasEditedArgs: normalizedDecisionType === "edit"
+            speakerType: "zeroclaw",
+            deploymentId,
+            model: result.model,
+            streamed: result.streamed,
+            transport: result.transport,
+            tokenChunks: result.tokenChunks,
+            syntheticFallbackUsed: result.syntheticFallbackUsed,
+            durationMs: result.durationMs,
+            attemptCount: result.attemptCount,
+            pairingRecovered: result.pairingRecovered
           }
         })
+        return
+      }
 
-        if (
-          normalizedDecisionType === "approve" &&
-          speaker?.id &&
-          typeof resumeToolName === "string" &&
-          resumeToolName.length > 0
-        ) {
-          const normalizedResumeToolName = resumeToolName.trim().toLowerCase()
-          const runtimeToolDefinition = getToolByName(workspaceId, normalizedResumeToolName)
-          const action =
-            runtimeToolDefinition?.action || mapToolNameToAction(normalizedResumeToolName)
-          const runtimeFilesystemTools =
-            runtimeToolDefinition?.category === "filesystem"
-              ? new Set([normalizedResumeToolName])
-              : undefined
-          const resolvedPolicy = resolvePolicyDecision({
+      const speaker = resolveSpeaker(workspaceId, speakerType, speakerAgentId)
+      writeTimelineEventSafe({
+        threadId,
+        workspaceId,
+        eventType: "user_message",
+        sourceAgentId: speaker?.id,
+        summary: trimSummary(message),
+        payload: {
+          speakerType: speaker?.type || "orchestrator"
+        }
+      })
+      const resolvedModelId = modelId || speaker?.modelName
+      const agent = await createAgentRuntime({
+        threadId,
+        workspacePath,
+        workspaceId,
+        modelId: resolvedModelId,
+        speaker
+      })
+      const humanMessage = new HumanMessage(message)
+
+      // Stream with both modes:
+      // - 'messages' for real-time token streaming
+      // - 'values' for full state (todos, files, etc.)
+      const stream = await agent.stream(
+        { messages: [humanMessage] },
+        {
+          configurable: { thread_id: threadId },
+          signal: abortController.signal,
+          streamMode: ["messages", "values"],
+          recursionLimit: 1000
+        }
+      )
+
+      for await (const chunk of stream) {
+        if (abortController.signal.aborted) break
+
+        // With multiple stream modes, chunks are tuples: [mode, data]
+        const [mode, data] = chunk as [string, unknown]
+        const serialized = JSON.parse(JSON.stringify(data))
+
+        persistStreamTimelineEvents({
+          threadId,
+          workspaceId,
+          mode,
+          data: serialized,
+          speaker
+        })
+
+        // Forward raw stream events - transport layer handles parsing
+        // Serialize to plain objects for IPC (class instances don't transfer)
+        window.webContents.send(channel, {
+          type: "stream",
+          mode,
+          data: serialized
+        })
+      }
+
+      // Send done event (only if not aborted)
+      if (!abortController.signal.aborted) {
+        window.webContents.send(channel, { type: "done" })
+      }
+    } catch (error) {
+      // Ignore abort-related errors (expected when stream is cancelled)
+      const isAbortError =
+        error instanceof Error &&
+        (error.name === "AbortError" ||
+          error.message.includes("aborted") ||
+          error.message.includes("Controller is already closed"))
+
+      if (!isAbortError) {
+        console.error("[Agent] Error:", error)
+        const errorMessage =
+          error instanceof Error ? trimSummary(error.message) : "Unknown stream error"
+        const zeroClawDeploymentId =
+          speakerType === "zeroclaw" && typeof speakerAgentId === "string"
+            ? speakerAgentId.trim()
+            : ""
+        const zeroClawPayload =
+          zeroClawDeploymentId.length > 0
+            ? {
+                speakerType: "zeroclaw",
+                deploymentId: zeroClawDeploymentId,
+                streamed: false,
+                hasError: true,
+                errorMessage
+              }
+            : undefined
+        writeTimelineEventSafe({
+          threadId,
+          workspaceId: workspaceIdForTimeline,
+          eventType: "error",
+          summary: errorMessage,
+          toolName: zeroClawPayload ? "zeroclaw:webhook" : undefined,
+          payload: zeroClawPayload
+        })
+        window.webContents.send(channel, {
+          type: "error",
+          error: error instanceof Error ? error.message : "Unknown error"
+        })
+      }
+    } finally {
+      window.removeListener("closed", onWindowClosed)
+      activeRuns.delete(threadId)
+    }
+  })
+
+  // Handle agent resume (after interrupt approval/rejection via useStream)
+  ipcMain.on("agent:resume", async (event, payload: unknown) => {
+    let threadId = ""
+    let command: AgentResumeParams["command"] = {}
+    let modelId: string | undefined
+    let speakerType: "orchestrator" | "agent" | "zeroclaw" | undefined
+    let speakerAgentId: string | undefined
+    try {
+      const parsed = parseAgentResumeParams(payload)
+      threadId = parsed.threadId
+      command = parsed.command
+      modelId = parsed.modelId
+      speakerType = parsed.speakerType
+      speakerAgentId = parsed.speakerAgentId
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : "Invalid agent resume payload."
+      console.error("[Agent] Resume payload validation failed:", messageText)
+      sendValidationError(event, payload, messageText)
+      return
+    }
+
+    const channel = `agent:stream:${threadId}`
+    const window = BrowserWindow.fromWebContents(event.sender)
+
+    console.log("[Agent] Received resume request:", {
+      threadId,
+      command,
+      modelId,
+      speakerType,
+      speakerAgentId
+    })
+
+    if (!window) {
+      console.error("[Agent] No window found for resume")
+      return
+    }
+
+    // Get workspace path from thread metadata
+    const thread = getThread(threadId)
+    const metadata = thread?.metadata ? JSON.parse(thread.metadata) : {}
+    const workspacePath = metadata.workspacePath as string | undefined
+    const workspaceId = (metadata.workspaceId as string | undefined) || DEFAULT_WORKSPACE_ID
+    const workspaceIdForTimeline = workspaceId
+
+    if (!workspacePath) {
+      window.webContents.send(channel, {
+        type: "error",
+        error: "Workspace path is required"
+      })
+      return
+    }
+
+    if (speakerType === "zeroclaw") {
+      window.webContents.send(channel, {
+        type: "error",
+        error: "ZeroClaw speaker does not support resume commands."
+      })
+      return
+    }
+
+    // Abort any existing stream before resuming
+    const existingController = activeRuns.get(threadId)
+    if (existingController) {
+      existingController.abort()
+      activeRuns.delete(threadId)
+    }
+
+    const abortController = new AbortController()
+    activeRuns.set(threadId, abortController)
+
+    try {
+      const speaker = resolveSpeaker(workspaceId, speakerType, speakerAgentId)
+      const decisionType = command?.resume?.decision || "approve"
+      const resumeToolName = command?.resume?.toolName
+      const resumeToolCallId = command?.resume?.toolCallId
+      const resumeToolArgs = command?.resume?.toolArgs as Record<string, unknown> | undefined
+      const normalizedDecisionType =
+        decisionType === "reject" || decisionType === "edit" ? decisionType : "approve"
+
+      writeTimelineEventSafe({
+        threadId,
+        workspaceId,
+        eventType: "tool_result",
+        sourceAgentId: speaker?.id,
+        toolName: resumeToolName || "approval:decision",
+        summary: `Approval ${normalizedDecisionType}: ${resumeToolName || "tool"}`,
+        dedupeKey: `${threadId}:approval_decision:${String(resumeToolCallId || "unknown")}:${normalizedDecisionType}`,
+        payload: {
+          approvalDecision: normalizedDecisionType,
+          toolName: resumeToolName,
+          toolCallId: resumeToolCallId,
+          hasEditedArgs: normalizedDecisionType === "edit"
+        }
+      })
+
+      if (
+        normalizedDecisionType === "approve" &&
+        speaker?.id &&
+        typeof resumeToolName === "string" &&
+        resumeToolName.length > 0
+      ) {
+        const normalizedResumeToolName = resumeToolName.trim().toLowerCase()
+        const runtimeToolDefinition = getToolByName(workspaceId, normalizedResumeToolName)
+        const action =
+          runtimeToolDefinition?.action || mapToolNameToAction(normalizedResumeToolName)
+        const runtimeFilesystemTools =
+          runtimeToolDefinition?.category === "filesystem"
+            ? new Set([normalizedResumeToolName])
+            : undefined
+        const resolvedPolicy = resolvePolicyDecision({
+          agentId: speaker.id,
+          resourceType: "tool",
+          resourceKey: normalizedResumeToolName,
+          action,
+          scope: "workspace"
+        })
+
+        if (resolvedPolicy.decision === "allow_in_session") {
+          grantPolicySessionAccess({
+            threadId,
             agentId: speaker.id,
             resourceType: "tool",
             resourceKey: normalizedResumeToolName,
+            action
+          })
+        }
+
+        if (isFilesystemToolName(normalizedResumeToolName, runtimeFilesystemTools)) {
+          const filesystemPolicy = resolvePolicyDecision({
+            agentId: speaker.id,
+            resourceType: "filesystem",
+            resourceKey: "*",
             action,
             scope: "workspace"
           })
-
-          if (resolvedPolicy.decision === "allow_in_session") {
+          if (filesystemPolicy.decision === "allow_in_session") {
             grantPolicySessionAccess({
               threadId,
               agentId: speaker.id,
-              resourceType: "tool",
-              resourceKey: normalizedResumeToolName,
+              resourceType: "filesystem",
+              resourceKey: "*",
               action
             })
           }
+        }
 
-          if (isFilesystemToolName(normalizedResumeToolName, runtimeFilesystemTools)) {
-            const filesystemPolicy = resolvePolicyDecision({
-              agentId: speaker.id,
-              resourceType: "filesystem",
-              resourceKey: "*",
-              action,
-              scope: "workspace"
-            })
-            if (filesystemPolicy.decision === "allow_in_session") {
-              grantPolicySessionAccess({
-                threadId,
-                agentId: speaker.id,
-                resourceType: "filesystem",
-                resourceKey: "*",
-                action
-              })
-            }
-          }
-
-          const detectedUrls = extractUrlsFromArgs(resumeToolArgs)
-          if (
-            (normalizedResumeToolName === "execute" || normalizedResumeToolName === "task") &&
-            detectedUrls.length > 0
-          ) {
-            const networkPolicy = resolvePolicyDecision({
+        const detectedUrls = extractUrlsFromArgs(resumeToolArgs)
+        if (
+          (normalizedResumeToolName === "execute" || normalizedResumeToolName === "task") &&
+          detectedUrls.length > 0
+        ) {
+          const networkPolicy = resolvePolicyDecision({
+            agentId: speaker.id,
+            resourceType: "network",
+            resourceKey: "*",
+            action: "exec",
+            scope: "workspace"
+          })
+          if (networkPolicy.decision === "allow_in_session") {
+            grantPolicySessionAccess({
+              threadId,
               agentId: speaker.id,
               resourceType: "network",
               resourceKey: "*",
-              action: "exec",
-              scope: "workspace"
+              action: "exec"
             })
-            if (networkPolicy.decision === "allow_in_session") {
-              grantPolicySessionAccess({
-                threadId,
-                agentId: speaker.id,
-                resourceType: "network",
-                resourceKey: "*",
-                action: "exec"
-              })
-            }
           }
+        }
 
-          const connectorInvocation = inferConnectorInvocation(
-            normalizedResumeToolName,
-            resumeToolArgs,
-            speaker.connectorAllowlist || []
-          )
-          if (connectorInvocation) {
-            const connectorPolicy = resolvePolicyDecision({
+        const connectorInvocation = inferConnectorInvocation(
+          normalizedResumeToolName,
+          resumeToolArgs,
+          speaker.connectorAllowlist || []
+        )
+        if (connectorInvocation) {
+          const connectorPolicy = resolvePolicyDecision({
+            agentId: speaker.id,
+            resourceType: "connector",
+            resourceKey: connectorInvocation.connectorKey,
+            action: connectorInvocation.action,
+            scope: "workspace"
+          })
+          if (connectorPolicy.decision === "allow_in_session") {
+            grantPolicySessionAccess({
+              threadId,
               agentId: speaker.id,
               resourceType: "connector",
               resourceKey: connectorInvocation.connectorKey,
-              action: connectorInvocation.action,
-              scope: "workspace"
+              action: connectorInvocation.action
             })
-            if (connectorPolicy.decision === "allow_in_session") {
-              grantPolicySessionAccess({
-                threadId,
-                agentId: speaker.id,
-                resourceType: "connector",
-                resourceKey: connectorInvocation.connectorKey,
-                action: connectorInvocation.action
-              })
-            }
           }
         }
+      }
 
-        const resolvedModelId = modelId || speaker?.modelName
-        const agent = await createAgentRuntime({
+      const resolvedModelId = modelId || speaker?.modelName
+      const agent = await createAgentRuntime({
+        threadId,
+        workspacePath,
+        workspaceId,
+        modelId: resolvedModelId,
+        speaker
+      })
+      const config = {
+        configurable: { thread_id: threadId },
+        signal: abortController.signal,
+        streamMode: ["messages", "values"] as StreamMode[],
+        recursionLimit: 1000
+      }
+
+      // Resume from checkpoint by streaming with Command containing the decision
+      // The HITL middleware expects { decisions: [{ type: 'approve' | 'reject' | 'edit' }] }
+      const resumeValue = { decisions: [{ type: normalizedDecisionType }] }
+      const stream = await agent.stream(new Command({ resume: resumeValue }), config)
+
+      for await (const chunk of stream) {
+        if (abortController.signal.aborted) break
+
+        const [mode, data] = chunk as unknown as [string, unknown]
+        const serialized = JSON.parse(JSON.stringify(data))
+        persistStreamTimelineEvents({
           threadId,
-          workspacePath,
           workspaceId,
-          modelId: resolvedModelId,
+          mode,
+          data: serialized,
           speaker
         })
-        const config = {
-          configurable: { thread_id: threadId },
-          signal: abortController.signal,
-          streamMode: ["messages", "values"] as StreamMode[],
-          recursionLimit: 1000
-        }
-
-        // Resume from checkpoint by streaming with Command containing the decision
-        // The HITL middleware expects { decisions: [{ type: 'approve' | 'reject' | 'edit' }] }
-        const resumeValue = { decisions: [{ type: normalizedDecisionType }] }
-        const stream = await agent.stream(new Command({ resume: resumeValue }), config)
-
-        for await (const chunk of stream) {
-          if (abortController.signal.aborted) break
-
-          const [mode, data] = chunk as unknown as [string, unknown]
-          const serialized = JSON.parse(JSON.stringify(data))
-          persistStreamTimelineEvents({
-            threadId,
-            workspaceId,
-            mode,
-            data: serialized,
-            speaker
-          })
-          window.webContents.send(channel, {
-            type: "stream",
-            mode,
-            data: serialized
-          })
-        }
-
-        if (!abortController.signal.aborted) {
-          window.webContents.send(channel, { type: "done" })
-        }
-      } catch (error) {
-        const isAbortError =
-          error instanceof Error &&
-          (error.name === "AbortError" ||
-            error.message.includes("aborted") ||
-            error.message.includes("Controller is already closed"))
-
-        if (!isAbortError) {
-          console.error("[Agent] Resume error:", error)
-          writeTimelineEventSafe({
-            threadId,
-            workspaceId: workspaceIdForTimeline,
-            eventType: "error",
-            summary: error instanceof Error ? trimSummary(error.message) : "Unknown resume error"
-          })
-          window.webContents.send(channel, {
-            type: "error",
-            error: error instanceof Error ? error.message : "Unknown error"
-          })
-        }
-      } finally {
-        activeRuns.delete(threadId)
+        window.webContents.send(channel, {
+          type: "stream",
+          mode,
+          data: serialized
+        })
       }
+
+      if (!abortController.signal.aborted) {
+        window.webContents.send(channel, { type: "done" })
+      }
+    } catch (error) {
+      const isAbortError =
+        error instanceof Error &&
+        (error.name === "AbortError" ||
+          error.message.includes("aborted") ||
+          error.message.includes("Controller is already closed"))
+
+      if (!isAbortError) {
+        console.error("[Agent] Resume error:", error)
+        writeTimelineEventSafe({
+          threadId,
+          workspaceId: workspaceIdForTimeline,
+          eventType: "error",
+          summary: error instanceof Error ? trimSummary(error.message) : "Unknown resume error"
+        })
+        window.webContents.send(channel, {
+          type: "error",
+          error: error instanceof Error ? error.message : "Unknown error"
+        })
+      }
+    } finally {
+      activeRuns.delete(threadId)
     }
-  )
+  })
 
   // Handle HITL interrupt response
-  ipcMain.on("agent:interrupt", async (event, { threadId, decision }: AgentInterruptParams) => {
+  ipcMain.on("agent:interrupt", async (event, payload: unknown) => {
+    let threadId = ""
+    let decision: AgentInterruptParams["decision"]
+    try {
+      const parsed = parseAgentInterruptParams(payload)
+      threadId = parsed.threadId
+      decision = parsed.decision
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : "Invalid agent interrupt payload."
+      console.error("[Agent] Interrupt payload validation failed:", messageText)
+      sendValidationError(event, payload, messageText)
+      return
+    }
+
     const channel = `agent:stream:${threadId}`
     const window = BrowserWindow.fromWebContents(event.sender)
 
@@ -1243,7 +1401,8 @@ export function registerAgentHandlers(ipcMain: IpcMain): void {
   })
 
   // Handle cancellation
-  ipcMain.handle("agent:cancel", async (_event, { threadId }: AgentCancelParams) => {
+  ipcMain.handle("agent:cancel", async (_event, payload: unknown) => {
+    const { threadId } = parseAgentCancelParams(payload)
     const controller = activeRuns.get(threadId)
     if (controller) {
       controller.abort()

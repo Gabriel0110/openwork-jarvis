@@ -29,6 +29,10 @@ NOTE: Always write great code. This is a non-negotiable.
 - Unit tests (watch): `npm run test:unit:watch`
 - Smoke tests (requires build output): `npm run test:smoke`
 - Build + smoke tests: `npm run test:smoke:build`
+- Harness all suites: `npm run harness:run`
+- Harness single suite: `npm run harness:run:suite -- --suite=<suite-key>`
+- Harness score recompute: `npm run harness:score:recompute`
+- Harness gate evaluation: `npm run harness:gate`
 
 ### Targeted / single-file checks
 
@@ -60,6 +64,9 @@ NOTE: Always write great code. This is a non-negotiable.
 
 - `src/main/`: Electron main process, IPC handlers, agent runtime, DB/storage
 - `src/main/zeroclaw/`: ZeroClaw managed runtime installer, supervisor, config, health/events bridge
+- `src/main/harness/`: harness benchmark runner, trace pipeline, analyzer, experiments, retention, promotion policy
+- `src/main/ipc/harness.ts`: harness IPC handlers (`harness:*`)
+- `src/renderer/src/components/harness/`: Harness operator UI
 - `src/main/services/prompt-*.ts`: prompt library discovery, render, and materialization services
 - `src/main/ipc/prompts.ts`: prompt repository IPC handlers (`prompts:*`)
 - `src/preload/`: Electron preload bridge and API typing
@@ -83,6 +90,14 @@ Prompt repository data layout (generated at runtime):
 - `~/.openwork/prompts/workspaces/<workspace-id>/`: managed workspace-scoped prompt assets
 - Discovery roots: `~/.agents/prompts` (priority), `~/.openwork/prompts/global`
 - DB tables: `prompt_assets`, `prompt_bindings`, `prompt_materializations`
+
+Harness data layout (generated at runtime):
+
+- Benchmark and experiment assets: `harness/benchmarks`, `harness/experiments`, `harness/analyzers/prompts`
+- Local CLI run outputs: `harness/.runs`
+- DB tables: `harness_runs`, `harness_task_results`, `harness_artifacts`, `harness_trace_exports`,
+  `harness_findings`, `harness_hypotheses`, `harness_experiment_runs`, `harness_experiment_variants`,
+  `harness_gate_reports`, `harness_metric_snapshots`
 
 ## 5) Style Rules (Enforced + Observed)
 

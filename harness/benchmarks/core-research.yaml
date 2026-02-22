@@ -1,0 +1,68 @@
+key: core-research
+name: Core Research
+description: Research-oriented suite covering sourcing, synthesis, and verification.
+tags: [research, core]
+tasks:
+  - key: research-easy-1
+    name: Summarize issue tracker
+    tier: easy
+    prompt: Summarize current high-priority issues.
+    expectedArtifacts:
+      - path: README.md
+        required: true
+  - key: research-easy-2
+    name: Extract architectural modules
+    tier: easy
+    prompt: List architecture modules and responsibilities.
+    expectedArtifacts:
+      - path: src/main/index.ts
+        required: true
+  - key: research-easy-3
+    name: Identify migration chronology
+    tier: easy
+    prompt: Enumerate schema migration timeline.
+    expectedArtifacts:
+      - path: src/main/db/migrations/index.ts
+        required: true
+  - key: research-medium-1
+    name: Build failure taxonomy
+    tier: medium
+    prompt: Classify failures into root-cause taxonomy.
+    expectedArtifacts:
+      - path: harness/analyzers/prompts/failure-taxonomy.md
+        required: true
+  - key: research-medium-2
+    name: Create intervention hypotheses
+    tier: medium
+    prompt: Create ranked interventions with confidence.
+    expectedArtifacts:
+      - path: harness/analyzers/prompts/intervention-hypotheses.md
+        required: true
+  - key: research-medium-3
+    name: Produce review rubric
+    tier: medium
+    prompt: Produce human review rubric for findings.
+    expectedArtifacts:
+      - path: harness/analyzers/prompts/review-rubric.md
+        required: true
+  - key: research-hard-1
+    name: Analyze policy friction
+    tier: hard
+    prompt: Quantify policy friction trends from findings and timelines.
+    expectedArtifacts:
+      - path: src/main/db/harness-metrics.ts
+        required: false
+  - key: research-hard-2
+    name: Compare experiment robustness
+    tier: hard
+    prompt: Compare experiment variants by reliability and safety.
+    expectedArtifacts:
+      - path: src/main/harness/experiment-runner.ts
+        required: false
+  - key: research-hard-3
+    name: Build decision brief
+    tier: hard
+    prompt: Draft promotion decision brief for human reviewer.
+    expectedArtifacts:
+      - path: src/main/harness/promotion-policy.ts
+        required: false

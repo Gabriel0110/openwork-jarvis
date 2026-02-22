@@ -22,6 +22,7 @@ import { consumePolicyRateLimit, hasPolicySessionAccess } from "../services/poli
 import { listAgents, type AgentRow } from "../db/agents"
 import { listTools } from "../db/tools"
 import { DEFAULT_WORKSPACE_ID } from "../db/workspaces"
+import { createTimelineEvent } from "../db/timeline-events"
 import { searchMemoryAndRag } from "../db/memory"
 import {
   getGlobalSkillDetailByName,
@@ -30,11 +31,16 @@ import {
 } from "../services/skills-registry"
 import type {
   AgentSkillMode,
+  HarnessStopReason,
   PolicyAction,
   SecurityDefaults,
   SkillDefinition,
   ToolDefinition
 } from "../types"
+import { createBudgetControllerMiddleware } from "./middleware/budget-controller"
+import { createLoopDetectionMiddleware } from "./middleware/loop-detection"
+import { createPreCompletionChecklistMiddleware } from "./middleware/pre-completion-checklist"
+import { StopReasonRecorder } from "./middleware/stop-reason"
 
 import type * as _lcTypes from "langchain"
 import type * as _lcMessages from "@langchain/core/messages"
@@ -773,13 +779,20 @@ function createPolicyMiddleware(
   connectorAllowlist: string[] = [],
   skillAllowlist: string[] = [],
   securityDefaults?: SecurityDefaults,
-  toolPolicyContext?: RuntimeToolPolicyContext
+  toolPolicyContext?: RuntimeToolPolicyContext,
+  onStopReason?: (reason: HarnessStopReason, details?: Record<string, unknown>) => void
 ): AgentMiddleware {
   const normalizedSkillAllowlist = new Set(
     skillAllowlist.map((item) => item.trim().toLowerCase()).filter(Boolean)
   )
 
   function denyTool(toolCallId: string | undefined, reason: string, denyCode: string): ToolMessage {
+    if (denyCode.startsWith("policy") || denyCode === "tool-disabled") {
+      onStopReason?.("policy_denied", {
+        denyCode,
+        reason
+      })
+    }
     return new ToolMessage({
       content: reason,
       tool_call_id: toolCallId || denyCode
@@ -957,7 +970,15 @@ function createPolicyMiddleware(
         }
       }
 
-      return handler(request)
+      try {
+        return await handler(request)
+      } catch (error) {
+        onStopReason?.("tool_failure", {
+          toolName: rawToolName || toolName,
+          message: error instanceof Error ? error.message : String(error)
+        })
+        throw error
+      }
     }
   })
 }
@@ -1067,6 +1088,11 @@ export async function createAgentRuntime(options: CreateAgentRuntimeOptions) {
     speaker
   )
   const securityDefaults = getSecurityDefaults()
+  const stopReasonRecorder = new StopReasonRecorder({
+    threadId,
+    workspaceId: effectiveWorkspaceId,
+    sourceAgentId: speaker?.id
+  })
   const policyConfig = buildPolicyConfig(
     threadId,
     speaker?.id,
@@ -1081,8 +1107,63 @@ export async function createAgentRuntime(options: CreateAgentRuntimeOptions) {
     speaker?.connectorAllowlist ?? [],
     runtimeSkills.map((skill) => skill.name),
     securityDefaults,
-    toolPolicyContext
+    toolPolicyContext,
+    (reason, details) => stopReasonRecorder.record(reason, details)
   )
+  const budgetMiddleware = createBudgetControllerMiddleware({
+    maxDurationMs: 12 * 60 * 1000,
+    maxToolCalls: 120,
+    onWarning: ({ level, usagePercent }) => {
+      createTimelineEvent({
+        threadId,
+        workspaceId: effectiveWorkspaceId,
+        sourceAgentId: speaker?.id,
+        eventType: "tool_result",
+        toolName: "runtime:budget",
+        summary: `Budget usage warning (${level}%)`,
+        payload: {
+          usagePercent: Number(usagePercent.toFixed(2))
+        }
+      })
+    },
+    onExhausted: (reason, details) => {
+      stopReasonRecorder.record(reason, details)
+    }
+  })
+  const loopMiddleware = createLoopDetectionMiddleware({
+    advisoryThreshold: 3,
+    stopThreshold: 5,
+    onAdvisory: ({ signature, repeats }) => {
+      createTimelineEvent({
+        threadId,
+        workspaceId: effectiveWorkspaceId,
+        sourceAgentId: speaker?.id,
+        eventType: "tool_result",
+        toolName: "runtime:loop_detector",
+        summary: "Loop advisory emitted.",
+        payload: {
+          signature,
+          repeats
+        }
+      })
+    },
+    onLoopStop: (reason, details) => {
+      stopReasonRecorder.record(reason, details)
+    }
+  })
+  const checklistMiddleware = createPreCompletionChecklistMiddleware({
+    onChecklistMiss: (details) => {
+      createTimelineEvent({
+        threadId,
+        workspaceId: effectiveWorkspaceId,
+        sourceAgentId: speaker?.id,
+        eventType: "tool_result",
+        toolName: "runtime:pre_completion_checklist",
+        summary: "Checklist warning",
+        payload: details
+      })
+    }
+  })
   const delegationSubagents =
     speaker?.type === "agent"
       ? []
@@ -1125,7 +1206,7 @@ The workspace root is: ${workspacePath}`
     // Custom filesystem prompt for absolute paths (requires deepagents update)
     filesystemSystemPrompt,
     interruptOn: policyConfig.interruptOn,
-    middleware: [policyMiddleware]
+    middleware: [policyMiddleware, budgetMiddleware, loopMiddleware, checklistMiddleware]
   } as Parameters<typeof createDeepAgent>[0])
 
   console.log("[Runtime] Delegation subagents loaded:", delegationSubagents.length)

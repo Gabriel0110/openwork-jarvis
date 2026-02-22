@@ -8,6 +8,17 @@ import type {
   ConnectorExportBundle,
   ConnectorDefinition,
   ConnectorImportResult,
+  HarnessArtifactRecord,
+  HarnessExperimentRun,
+  HarnessExperimentSpec,
+  HarnessFinding,
+  HarnessGateReport,
+  HarnessMetricSummary,
+  HarnessRetentionRunResult,
+  HarnessRun,
+  HarnessSuiteSpec,
+  HarnessTaskResult,
+  HarnessTraceExport,
   GraphLayoutEntry,
   HITLDecision,
   McpServerDefinition,
@@ -531,6 +542,143 @@ const api = {
       workspaceRoot?: string
     }): Promise<PromptBootstrapCheckResult> => {
       return ipcRenderer.invoke("prompts:checkBootstrap", params)
+    }
+  },
+  harness: {
+    isEnabled: (): Promise<{ enabled: boolean }> => {
+      return ipcRenderer.invoke("harness:isEnabled")
+    },
+    suites: {
+      list: (): Promise<{
+        suites: HarnessSuiteSpec[]
+        experimentSpecs: HarnessExperimentSpec[]
+      }> => {
+        return ipcRenderer.invoke("harness:suites:list")
+      }
+    },
+    runs: {
+      start: (params: {
+        suiteKey: string
+        workspaceId?: string
+        workspacePath?: string
+        profileKey?: string
+        modelId?: string
+        executionMode?: "local" | "matrix"
+        taskExecutionMode?: "live" | "synthetic"
+        seed?: number
+        variantConfig?: {
+          variantKey?: string
+          variantLabel?: string
+          promptPatch?: string
+          middleware?: Record<string, unknown>
+          budget?: {
+            maxDurationMs?: number
+            maxToolCalls?: number
+            maxTokens?: number
+          }
+        }
+      }): Promise<HarnessRun> => {
+        return ipcRenderer.invoke("harness:runs:start", params)
+      },
+      list: (filters?: {
+        status?: HarnessRun["status"]
+        suiteKey?: string
+        workspaceId?: string
+        limit?: number
+      }): Promise<HarnessRun[]> => {
+        return ipcRenderer.invoke("harness:runs:list", filters)
+      },
+      get: (
+        runId: string
+      ): Promise<{
+        run: HarnessRun
+        tasks: HarnessTaskResult[]
+        artifacts: HarnessArtifactRecord[]
+      }> => {
+        return ipcRenderer.invoke("harness:runs:get", { runId })
+      },
+      cancel: (runId: string): Promise<HarnessRun> => {
+        return ipcRenderer.invoke("harness:runs:cancel", { runId })
+      },
+      getArtifacts: (runId: string, taskKey?: string): Promise<HarnessArtifactRecord[]> => {
+        return ipcRenderer.invoke("harness:runs:getArtifacts", { runId, taskKey })
+      }
+    },
+    traces: {
+      export: (params: {
+        runId: string
+        taskKey?: string
+        format?: "json" | "jsonl" | "summary"
+      }): Promise<HarnessTraceExport> => {
+        return ipcRenderer.invoke("harness:traces:export", params)
+      }
+    },
+    findings: {
+      list: (filters?: {
+        runId?: string
+        status?: "pending_review" | "approved" | "rejected" | "queued_for_experiment"
+        severity?: "low" | "medium" | "high" | "critical"
+        limit?: number
+      }): Promise<HarnessFinding[]> => {
+        return ipcRenderer.invoke("harness:findings:list", filters)
+      },
+      review: (
+        findingId: string,
+        decision: "approved" | "rejected" | "queued_for_experiment",
+        notes?: string,
+        reviewer?: string
+      ): Promise<HarnessFinding> => {
+        return ipcRenderer.invoke("harness:findings:review", {
+          findingId,
+          decision,
+          notes,
+          reviewer
+        })
+      },
+      analyzeRun: (runId: string): Promise<{ findings: HarnessFinding[] }> => {
+        return ipcRenderer.invoke("harness:findings:analyzeRun", { runId })
+      }
+    },
+    experiments: {
+      run: (specIdOrInlineSpec: string | HarnessExperimentSpec): Promise<HarnessExperimentRun> => {
+        return ipcRenderer.invoke("harness:experiments:run", { specIdOrInlineSpec })
+      },
+      list: (filters?: {
+        status?: HarnessExperimentRun["status"]
+        limit?: number
+      }): Promise<HarnessExperimentRun[]> => {
+        return ipcRenderer.invoke("harness:experiments:list", filters)
+      },
+      get: (experimentRunId: string): Promise<HarnessExperimentRun> => {
+        return ipcRenderer.invoke("harness:experiments:get", { experimentRunId })
+      },
+      promote: (
+        experimentRunId: string,
+        approvedBy: string,
+        notes?: string
+      ): Promise<HarnessExperimentRun> => {
+        return ipcRenderer.invoke("harness:experiments:promote", {
+          experimentRunId,
+          approvedBy,
+          notes
+        })
+      }
+    },
+    metrics: {
+      summary: (
+        windowMs?: number
+      ): Promise<{
+        summary: HarnessMetricSummary
+        gateReports: HarnessGateReport[]
+        novel: Array<{ feature: string; enabled: boolean; status: string; message: string }>
+      }> => {
+        return ipcRenderer.invoke("harness:metrics:summary", { windowMs })
+      }
+    },
+    retention: {
+      runNow: (): Promise<HarnessRetentionRunResult> => {
+        return ipcRenderer.invoke("harness:retention:runNow")
+      }
     }
   },
   connectors: {
