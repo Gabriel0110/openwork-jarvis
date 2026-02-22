@@ -31,6 +31,8 @@ import type {
   SkillListResult,
   SettingsStorageLocations,
   StreamEvent,
+  TerminalSessionState,
+  TerminalStreamEvent,
   TimelineEvent,
   TimelineIngestTriggerParams,
   ToolDefinition,
@@ -491,6 +493,26 @@ interface CustomAPI {
     doctor: {
       run: (deploymentId?: string) => Promise<ZeroClawDoctorReport>
     }
+  }
+  terminal: {
+    connect: (
+      threadId: string,
+      workspacePath?: string,
+      cols?: number,
+      rows?: number
+    ) => Promise<TerminalSessionState>
+    getState: (threadId: string) => Promise<TerminalSessionState | null>
+    input: (threadId: string, data: string) => Promise<void>
+    resize: (threadId: string, cols: number, rows: number) => Promise<TerminalSessionState>
+    kill: (threadId: string) => Promise<TerminalSessionState | null>
+    restart: (
+      threadId: string,
+      workspacePath?: string,
+      cols?: number,
+      rows?: number
+    ) => Promise<TerminalSessionState>
+    dispose: (threadId: string) => Promise<void>
+    onEvent: (threadId: string, callback: (event: TerminalStreamEvent) => void) => () => void
   }
   workspace: {
     get: (threadId?: string) => Promise<string | null>

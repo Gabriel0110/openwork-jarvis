@@ -1,18 +1,21 @@
-import { Bot, X, FileCode, FileText, FileJson, File } from "lucide-react"
+import { Bot, X, FileCode, FileText, FileJson, File, SquareTerminal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppStore } from "@/lib/store"
 import { useThreadState, type OpenFile } from "@/lib/thread-context"
+import { Button } from "@/components/ui/button"
 
 interface TabBarProps {
   className?: string
   threadId?: string
+  showTerminalToggle?: boolean
 }
 
 export function TabBar({
   className,
-  threadId: propThreadId
+  threadId: propThreadId,
+  showTerminalToggle = false
 }: TabBarProps): React.JSX.Element | null {
-  const { currentThreadId } = useAppStore()
+  const { currentThreadId, terminalDockByThread, toggleTerminalDock } = useAppStore()
   const threadId = propThreadId ?? currentThreadId
   const threadState = useThreadState(threadId)
 
@@ -21,6 +24,7 @@ export function TabBar({
   }
 
   const { openFiles, activeTab, setActiveTab, closeFile } = threadState
+  const terminalOpen = threadId ? terminalDockByThread[threadId]?.open === true : false
 
   return (
     <div
@@ -56,6 +60,21 @@ export function TabBar({
 
       {/* Spacer to fill remaining space */}
       <div className="flex-1 min-w-0" />
+
+      {showTerminalToggle && threadId && (
+        <div className="shrink-0 px-2">
+          <Button
+            variant={terminalOpen ? "outline" : "ghost"}
+            size="sm"
+            className="h-7"
+            onClick={() => toggleTerminalDock(threadId)}
+            title="Toggle terminal dock"
+          >
+            <SquareTerminal className="size-3.5" />
+            Terminal
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

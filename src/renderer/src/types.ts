@@ -216,6 +216,28 @@ export interface SettingsStorageLocations {
   promptsGlobalDir: string
 }
 
+export interface TerminalSessionState {
+  threadId: string
+  cwd: string
+  shell: string
+  pid: number
+  alive: boolean
+  cols: number
+  rows: number
+  startedAt: Date
+  lastExitCode?: number
+}
+
+export interface TerminalStreamEvent {
+  type: "state" | "data" | "exit" | "error"
+  threadId: string
+  state?: TerminalSessionState
+  data?: string
+  exitCode?: number
+  signal?: number
+  error?: string
+}
+
 export type TimelineEventType =
   | "user_message"
   | "tool_call"

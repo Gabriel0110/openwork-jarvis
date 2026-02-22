@@ -35,6 +35,7 @@ interface AppState {
   showSettingsView: boolean
   showTemplatesView: boolean
   selectedTemplateId: string | null
+  terminalDockByThread: Record<string, { open: boolean; height: number }>
 
   // Thread actions
   loadThreads: () => Promise<void>
@@ -98,6 +99,9 @@ interface AppState {
   setShowSettingsView: (show: boolean) => void
   setShowTemplatesView: (show: boolean, templateId?: string | null) => void
   setSelectedTemplateId: (templateId: string | null) => void
+  setTerminalDockOpen: (threadId: string, open: boolean) => void
+  toggleTerminalDock: (threadId: string) => void
+  setTerminalDockHeight: (threadId: string, height: number) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -124,6 +128,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   showSettingsView: false,
   showTemplatesView: false,
   selectedTemplateId: null,
+  terminalDockByThread: {},
 
   // Thread actions
   loadThreads: async () => {
@@ -525,6 +530,53 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedTemplateId: (templateId: string | null) => {
     set({
       selectedTemplateId: templateId && templateId.trim().length > 0 ? templateId : null
+    })
+  },
+
+  setTerminalDockOpen: (threadId: string, open: boolean) => {
+    set((state) => {
+      const existing = state.terminalDockByThread[threadId]
+      return {
+        terminalDockByThread: {
+          ...state.terminalDockByThread,
+          [threadId]: {
+            open,
+            height: existing?.height ?? 220
+          }
+        }
+      }
+    })
+  },
+
+  toggleTerminalDock: (threadId: string) => {
+    set((state) => {
+      const existing = state.terminalDockByThread[threadId]
+      const open = existing ? !existing.open : true
+      return {
+        terminalDockByThread: {
+          ...state.terminalDockByThread,
+          [threadId]: {
+            open,
+            height: existing?.height ?? 220
+          }
+        }
+      }
+    })
+  },
+
+  setTerminalDockHeight: (threadId: string, height: number) => {
+    const nextHeight = Math.max(140, Math.min(520, Math.round(height)))
+    set((state) => {
+      const existing = state.terminalDockByThread[threadId]
+      return {
+        terminalDockByThread: {
+          ...state.terminalDockByThread,
+          [threadId]: {
+            open: existing?.open ?? false,
+            height: nextHeight
+          }
+        }
+      }
     })
   }
 }))

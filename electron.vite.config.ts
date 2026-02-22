@@ -34,7 +34,7 @@ export default defineConfig({
         formats: ["cjs"]
       },
       rollupOptions: {
-        external: ["electron"],
+        external: ["electron", "node-pty"],
         plugins: [copyResources()]
       }
     }

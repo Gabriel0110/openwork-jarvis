@@ -192,7 +192,13 @@ function App(): React.JSX.Element {
               ) : showSettingsView ? (
                 <div className="h-full px-4 flex items-center text-section-header">SETTINGS</div>
               ) : (
-                currentThreadId && <TabBar className="h-full border-b-0" />
+                currentThreadId && (
+                  <TabBar
+                    className="h-full border-b-0"
+                    threadId={currentThreadId}
+                    showTerminalToggle
+                  />
+                )
               )}
             </div>
           </div>

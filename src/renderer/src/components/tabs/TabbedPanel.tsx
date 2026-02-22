@@ -1,7 +1,9 @@
 import { useCurrentThread } from "@/lib/thread-context"
+import { useAppStore } from "@/lib/store"
 import { TabBar } from "./TabBar"
 import { FileViewer } from "./FileViewer"
 import { ChatContainer } from "@/components/chat/ChatContainer"
+import { TerminalDock } from "./TerminalDock"
 
 interface TabbedPanelProps {
   threadId: string
@@ -10,10 +12,15 @@ interface TabbedPanelProps {
 
 export function TabbedPanel({ threadId, showTabBar = true }: TabbedPanelProps): React.JSX.Element {
   const { activeTab, openFiles } = useCurrentThread(threadId)
+  const terminalDockState = useAppStore((state) => state.terminalDockByThread[threadId])
+  const setTerminalDockOpen = useAppStore((state) => state.setTerminalDockOpen)
+  const setTerminalDockHeight = useAppStore((state) => state.setTerminalDockHeight)
 
   // Determine what to render based on active tab
   const isAgentTab = activeTab === "agent"
   const activeFile = openFiles.find((f) => f.path === activeTab)
+  const terminalOpen = terminalDockState?.open ?? false
+  const terminalHeight = terminalDockState?.height ?? 220
 
   return (
     <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
@@ -37,6 +44,15 @@ export function TabbedPanel({ threadId, showTabBar = true }: TabbedPanelProps): 
           </div>
         )}
       </div>
+
+      {terminalOpen && (
+        <TerminalDock
+          threadId={threadId}
+          height={terminalHeight}
+          onHeightChange={(height) => setTerminalDockHeight(threadId, height)}
+          onClose={() => setTerminalDockOpen(threadId, false)}
+        />
+      )}
     </div>
   )
 }

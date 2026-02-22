@@ -10,6 +10,7 @@ import {
 import { getCheckpointer, closeCheckpointer } from "../agent/runtime"
 import { deleteThreadCheckpoint } from "../storage"
 import { clearPolicyThreadSession } from "../services/policy-session"
+import { getThreadTerminalManager } from "../services/thread-terminal-manager"
 import { generateTitle } from "../services/title-generator"
 import type { Thread, ThreadUpdateParams } from "../types"
 
@@ -111,6 +112,9 @@ export function registerThreadHandlers(ipcMain: IpcMain): void {
     } catch (e) {
       console.warn("[Threads] Failed to delete checkpoint file:", e)
     }
+
+    getThreadTerminalManager().dispose(threadId)
+    console.log("[Threads] Disposed terminal session")
   })
 
   // Get thread history (checkpoints)

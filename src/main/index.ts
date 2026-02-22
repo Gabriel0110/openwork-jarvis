@@ -14,9 +14,11 @@ import { registerSettingsHandlers } from "./ipc/settings"
 import { registerSkillHandlers } from "./ipc/skills"
 import { registerToolHandlers } from "./ipc/tools"
 import { registerPromptHandlers } from "./ipc/prompts"
+import { registerTerminalHandlers } from "./ipc/terminal"
 import { registerZeroClawHandlers } from "./ipc/zeroclaw"
 import { closeDatabase, initializeDatabase } from "./db"
 import { startTemplateScheduler, stopTemplateScheduler } from "./services/template-scheduler"
+import { getThreadTerminalManager } from "./services/thread-terminal-manager"
 import { getZeroClawManager } from "./zeroclaw/manager"
 
 let mainWindow: BrowserWindow | null = null
@@ -111,6 +113,7 @@ app.whenReady().then(async () => {
   registerSkillHandlers(ipcMain)
   registerToolHandlers(ipcMain)
   registerPromptHandlers(ipcMain)
+  registerTerminalHandlers(ipcMain)
   registerZeroClawHandlers(ipcMain)
   registerThreadHandlers(ipcMain)
   registerModelHandlers(ipcMain)
@@ -131,6 +134,7 @@ app.on("window-all-closed", () => {
 })
 
 app.on("before-quit", () => {
+  getThreadTerminalManager().disposeAll()
   const zeroClawManager = getZeroClawManager()
   void zeroClawManager.shutdown()
   stopTemplateScheduler()

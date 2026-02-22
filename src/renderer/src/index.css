@@ -624,3 +624,17 @@
 .shiki-content .line:hover {
   background-color: var(--background-interactive);
 }
+
+.terminal-xterm-host {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+}
+
+.terminal-xterm-host .xterm {
+  height: 100%;
+}
+
+.terminal-xterm-host .xterm-viewport {
+  overscroll-behavior: contain;
+}

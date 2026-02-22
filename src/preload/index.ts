@@ -35,6 +35,8 @@ import type {
   StreamEvent,
   TimelineEvent,
   TimelineIngestTriggerParams,
+  TerminalSessionState,
+  TerminalStreamEvent,
   ToolDefinition,
   Thread,
   ZeroClawActionResult,
@@ -807,6 +809,49 @@ const api = {
     doctor: {
       run: (deploymentId?: string): Promise<ZeroClawDoctorReport> => {
         return ipcRenderer.invoke("zeroclaw:doctor:run", { deploymentId })
+      }
+    }
+  },
+  terminal: {
+    connect: (
+      threadId: string,
+      workspacePath?: string,
+      cols?: number,
+      rows?: number
+    ): Promise<TerminalSessionState> => {
+      return ipcRenderer.invoke("terminal:connect", { threadId, workspacePath, cols, rows })
+    },
+    getState: (threadId: string): Promise<TerminalSessionState | null> => {
+      return ipcRenderer.invoke("terminal:getState", { threadId })
+    },
+    input: (threadId: string, data: string): Promise<void> => {
+      return ipcRenderer.invoke("terminal:input", { threadId, data })
+    },
+    resize: (threadId: string, cols: number, rows: number): Promise<TerminalSessionState> => {
+      return ipcRenderer.invoke("terminal:resize", { threadId, cols, rows })
+    },
+    kill: (threadId: string): Promise<TerminalSessionState | null> => {
+      return ipcRenderer.invoke("terminal:kill", { threadId })
+    },
+    restart: (
+      threadId: string,
+      workspacePath?: string,
+      cols?: number,
+      rows?: number
+    ): Promise<TerminalSessionState> => {
+      return ipcRenderer.invoke("terminal:restart", { threadId, workspacePath, cols, rows })
+    },
+    dispose: (threadId: string): Promise<void> => {
+      return ipcRenderer.invoke("terminal:dispose", { threadId })
+    },
+    onEvent: (threadId: string, callback: (event: TerminalStreamEvent) => void): (() => void) => {
+      const channel = `terminal:stream:${threadId}`
+      const handler = (_: unknown, event: TerminalStreamEvent): void => {
+        callback(event)
+      }
+      ipcRenderer.on(channel, handler)
+      return () => {
+        ipcRenderer.removeListener(channel, handler)
       }
     }
   },

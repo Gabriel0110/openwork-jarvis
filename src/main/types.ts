@@ -1162,6 +1162,58 @@ export interface WorkspaceFileParams {
   filePath: string
 }
 
+// Terminal IPC
+export interface TerminalConnectParams {
+  threadId: string
+  workspacePath?: string
+  cols?: number
+  rows?: number
+}
+
+export interface TerminalInputParams {
+  threadId: string
+  data: string
+}
+
+export interface TerminalResizeParams {
+  threadId: string
+  cols: number
+  rows: number
+}
+
+export interface TerminalKillParams {
+  threadId: string
+}
+
+export interface TerminalRestartParams {
+  threadId: string
+  workspacePath?: string
+  cols?: number
+  rows?: number
+}
+
+export interface TerminalSessionState {
+  threadId: string
+  cwd: string
+  shell: string
+  pid: number
+  alive: boolean
+  cols: number
+  rows: number
+  startedAt: Date
+  lastExitCode?: number
+}
+
+export interface TerminalStreamEvent {
+  type: "state" | "data" | "exit" | "error"
+  threadId: string
+  state?: TerminalSessionState
+  data?: string
+  exitCode?: number
+  signal?: number
+  error?: string
+}
+
 // Model IPC
 export interface SetApiKeyParams {
   provider: string
