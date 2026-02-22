@@ -9,6 +9,19 @@
 - [x] Fix dock viewport clipping and wire robust resize/fit behavior
 - [x] Validate with lint + typecheck + build
 
+## Harness Engineering Program (New)
+
+- [x] Upgrade `deepagents` and align LangChain dependency stack
+- [x] Stabilize SDK/runtime compatibility after dependency upgrades
+- [ ] Implement benchmark corpus + scoring harness (`W1`)
+- [ ] Implement normalized trace export layer (`W2`)
+- [ ] Implement parallel subagent trace analyzer + review gate (`W3`)
+- [ ] Implement experiment/ablation engine + promotion rules (`W4`)
+- [ ] Implement runtime harness hardening middleware (`W5`)
+- [ ] Implement approval quality metrics and diagnostics (`W6`)
+- [ ] Implement Harness operator UI (`W7`)
+- [ ] Implement CI/nightly harness merge gates (`W8`)
+
 ## Review
 
 - Implemented a real PTY-backed terminal dock using `node-pty` + `@xterm/xterm`, enabling TUI apps.
@@ -25,3 +38,7 @@
   - `npm run build`
   - `npm run test`
   - `npm run test:smoke:build`
+- Dependency upgrade tranche completed:
+  - `deepagents` upgraded to `1.8.0`
+  - LangChain stack aligned (`langchain`, `@langchain/core`, `@langchain/langgraph`, provider packages)
+  - Post-upgrade compatibility fixes applied in runtime/IPC/renderer stream typing

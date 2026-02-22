@@ -870,7 +870,7 @@ function createPolicyMiddleware(
   return createMiddleware({
     name: "policy-enforcement-middleware",
     wrapToolCall: async (request, handler) => {
-      const rawToolName = String(request.tool.name ?? "")
+      const rawToolName = String(request.tool?.name ?? request.toolCall?.name ?? "")
       const toolName = normalizeToolName(rawToolName)
       const action = mapToolNameToAction(toolName, toolPolicyContext?.actionByName)
       const toolArgs = request.toolCall.args as Record<string, unknown>

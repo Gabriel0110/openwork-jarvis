@@ -14,7 +14,6 @@ import {
 import { useStream } from "@langchain/langgraph-sdk/react"
 import { ElectronIPCTransport } from "./electron-transport"
 import type { Message, Todo, FileInfo, Subagent, HITLRequest } from "@/types"
-import type { DeepAgent } from "../../../main/agent/types"
 
 // Open file tab type
 export interface OpenFile {
@@ -52,7 +51,20 @@ export interface ThreadState {
 }
 
 // Stream instance type
-type StreamInstance = ReturnType<typeof useStream<DeepAgent>>
+type StreamInstance = ReturnType<
+  typeof useStream<
+    Record<string, unknown>,
+    {
+      UpdateType: { messages: Array<{ content: string; type: string }> } | null
+      ConfigurableType: {
+        thread_id: string
+        model_id?: string
+        speaker_type?: "orchestrator" | "agent" | "zeroclaw"
+        speaker_agent_id?: string
+      }
+    }
+  >
+>
 
 // Stream data that we want to be reactive
 interface StreamData {
@@ -176,7 +188,18 @@ function ThreadStreamHolder({
     onErrorRef.current = onError
   })
 
-  const stream = useStream<DeepAgent>({
+  const stream = useStream<
+    Record<string, unknown>,
+    {
+      UpdateType: { messages: Array<{ content: string; type: string }> } | null
+      ConfigurableType: {
+        thread_id: string
+        model_id?: string
+        speaker_type?: "orchestrator" | "agent" | "zeroclaw"
+        speaker_agent_id?: string
+      }
+    }
+  >({
     transport,
     threadId,
     messagesKey: "messages",

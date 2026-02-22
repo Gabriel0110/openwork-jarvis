@@ -1,6 +1,6 @@
 import { IpcMain, BrowserWindow } from "electron"
 import { HumanMessage } from "@langchain/core/messages"
-import { Command } from "@langchain/langgraph"
+import { Command, type StreamMode } from "@langchain/langgraph"
 import { createAgentRuntime } from "../agent/runtime"
 import { getThread, updateThread } from "../db"
 import { getAgent, listAgents } from "../db/agents"
@@ -1051,7 +1051,7 @@ export function registerAgentHandlers(ipcMain: IpcMain): void {
         const config = {
           configurable: { thread_id: threadId },
           signal: abortController.signal,
-          streamMode: ["messages", "values"] as const,
+          streamMode: ["messages", "values"] as StreamMode[],
           recursionLimit: 1000
         }
 
@@ -1181,7 +1181,7 @@ export function registerAgentHandlers(ipcMain: IpcMain): void {
       const config = {
         configurable: { thread_id: threadId },
         signal: abortController.signal,
-        streamMode: ["messages", "values"] as const,
+        streamMode: ["messages", "values"] as StreamMode[],
         recursionLimit: 1000
       }
 
