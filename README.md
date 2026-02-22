@@ -24,7 +24,8 @@ agent orchestration, policy-gated actions, and operator-focused observability.
 - Prompt repository system for reusable markdown assets (`AGENTS.md` + generic prompts), workspace/agent bindings, and conflict-safe materialization.
 - Connectors + MCP management surfaces with bundle portability, redaction-safe import/export, telemetry, and trigger simulation.
 - ZeroClaw first-class integration with managed runtime lifecycle, deployment policies, threaded chat speaker mode, and diagnostics.
-- Harness engineering surface with benchmark suites, trace exports, failure analysis, experiment promotion workflow, and CI/nightly quality signals.
+- Harness engineering system with benchmark suites, trace exports, failure analysis, experiment promotion workflow, runtime hardening metrics, and CI/nightly quality signals.
+- `@` workspace file mentions with autocomplete, attached-file chips, click-to-open behavior, and bounded context injection into agent/ZeroClaw runs.
 - Operator-oriented Home/Settings UX for health, approvals, scheduler/runtime status, local paths, and secure-default controls.
 
 ### Detailed Capability Additions
@@ -90,6 +91,15 @@ agent orchestration, policy-gated actions, and operator-focused observability.
 - Disabled-tool enforcement across middleware and resume paths.
 - Safe no-execution tool preview console.
 
+#### File Mentions and Context Attachments
+
+- Thread composer `@` mention search for workspace files with ranked suggestions and keyboard navigation.
+- Mention selections materialize as attached file chips (Codex/Cursor-style) with remove and click-to-open actions.
+- Attached files are passed as explicit `referencedFiles` metadata through renderer transport, preload, and main IPC.
+- Main-process mention resolver supports inline `@path` tokens and explicit attachments together.
+- Context injection is constrained by workspace confinement, traversal rejection, binary detection, per-file size caps, and total context truncation limits.
+- Mention-derived file content is injected for the current invocation without mutating the visible user chat message text.
+
 #### Prompt Repository and AGENTS Reuse
 
 - Dedicated Prompts page for managing reusable markdown prompt assets.
@@ -136,6 +146,7 @@ agent orchestration, policy-gated actions, and operator-focused observability.
 - Parallelized trace analyzer workflow with finding/hypothesis generation and human-review state transitions.
 - Experiment + ablation orchestration with promotion policy checks and explicit human promotion approval.
 - Runtime hardening middleware for budget controls, loop detection, pre-completion checklist warnings, and stop-reason telemetry.
+- Harness metrics and gate reporting surfaces for run health, safety/approval friction, and promotion diagnostics.
 - CI observe-stage harness job plus nightly harness benchmark workflow with artifact upload.
 - Novel extension contracts (N1-N7) stubbed behind feature flags (`HARNESS_N1_ENABLED` … `HARNESS_N7_ENABLED`).
 
