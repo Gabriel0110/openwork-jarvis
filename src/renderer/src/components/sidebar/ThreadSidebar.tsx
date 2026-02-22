@@ -13,6 +13,7 @@ import {
   Plug,
   FileStack,
   Wrench,
+  BookText,
   Bot,
   Settings2
 } from "lucide-react"
@@ -207,6 +208,7 @@ export function ThreadSidebar(): React.JSX.Element {
     setShowMemoryView,
     setShowConnectorsView,
     setShowToolsView,
+    setShowPromptsView,
     setShowZeroClawView,
     setShowSettingsView,
     setShowTemplatesView
@@ -413,6 +415,15 @@ export function ThreadSidebar(): React.JSX.Element {
         >
           <Wrench className="size-4" />
           Skills/Tools
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 mt-1"
+          onClick={() => setShowPromptsView(true)}
+        >
+          <BookText className="size-4" />
+          Prompts
         </Button>
         <Button
           variant="ghost"

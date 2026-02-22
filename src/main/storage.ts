@@ -80,6 +80,30 @@ export function getZeroClawLogsDir(): string {
   return dir
 }
 
+export function getPromptsRootDir(): string {
+  const dir = join(getOpenworkDir(), "prompts")
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+export function getPromptGlobalDir(): string {
+  const dir = join(getPromptsRootDir(), "global")
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+export function getPromptWorkspaceDir(workspaceId: string): string {
+  const dir = join(getPromptsRootDir(), "workspaces", workspaceId)
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
 export function deleteThreadCheckpoint(threadId: string): void {
   const path = getThreadCheckpointPath(threadId)
   if (existsSync(path)) {
@@ -155,7 +179,9 @@ export function getStorageLocations(): SettingsStorageLocations {
     zeroClawDir: getZeroClawDir(),
     zeroClawRuntimeDir: getZeroClawRuntimeDir(),
     zeroClawDeploymentsDir: getZeroClawDeploymentsDir(),
-    zeroClawLogsDir: getZeroClawLogsDir()
+    zeroClawLogsDir: getZeroClawLogsDir(),
+    promptsRootDir: getPromptsRootDir(),
+    promptsGlobalDir: getPromptGlobalDir()
   }
 }
 

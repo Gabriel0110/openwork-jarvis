@@ -16,6 +16,14 @@ import type {
   PolicyRule,
   PolicyUpsertParams,
   Provider,
+  PromptAsset,
+  PromptBinding,
+  PromptBootstrapCheckResult,
+  PromptConflict,
+  PromptListResult,
+  PromptMaterializationRecord,
+  PromptPack,
+  PromptRenderPreview,
   RagIndexResult,
   RagSource,
   SecurityDefaults,
@@ -201,6 +209,120 @@ interface CustomAPI {
       >
     ) => Promise<ToolDefinition>
     delete: (toolId: string) => Promise<void>
+  }
+  prompts: {
+    list: (params?: {
+      workspaceId?: string
+      query?: string
+      scope?: "global" | "workspace" | "all"
+      source?: "managed" | "discovered_agents" | "discovered_openwork" | "all"
+      agentsOnly?: boolean
+    }) => Promise<PromptListResult>
+    get: (assetId: string) => Promise<{ asset: PromptAsset; content: string }>
+    create: (params: {
+      workspaceId?: string
+      title: string
+      description?: string
+      slug?: string
+      fileName: string
+      scope?: "global" | "workspace"
+      tags?: string[]
+      variables?: string[]
+      content: string
+    }) => Promise<PromptAsset>
+    update: (
+      assetId: string,
+      updates: {
+        title?: string
+        description?: string
+        slug?: string
+        fileName?: string
+        tags?: string[]
+        variables?: string[]
+        content?: string
+      }
+    ) => Promise<PromptAsset>
+    delete: (assetId: string) => Promise<void>
+    refreshDiscovery: () => Promise<PromptListResult>
+    renderPreview: (params: {
+      assetId?: string
+      content?: string
+      workspaceId?: string
+      workspaceRoot?: string
+      agentId?: string
+      agentName?: string
+      agentRole?: string
+      variables?: Record<string, string>
+    }) => Promise<PromptRenderPreview>
+    bindings: {
+      list: (workspaceId?: string) => Promise<PromptBinding[]>
+      create: (params: {
+        assetId: string
+        workspaceId?: string
+        targetType: "workspace" | "agent"
+        targetAgentId?: string
+        materializeMode: "workspace_root" | "agent_docs"
+        relativeOutputPath?: string
+        enabled?: boolean
+      }) => Promise<PromptBinding>
+      update: (
+        bindingId: string,
+        updates: {
+          targetType?: "workspace" | "agent"
+          targetAgentId?: string
+          materializeMode?: "workspace_root" | "agent_docs"
+          relativeOutputPath?: string
+          enabled?: boolean
+        }
+      ) => Promise<PromptBinding>
+      delete: (bindingId: string) => Promise<void>
+    }
+    materialize: (params: {
+      bindingId: string
+      workspaceRoot?: string
+      overwriteConflict?: boolean
+      variables?: Record<string, string>
+    }) => Promise<{
+      status: "applied" | "conflict" | "failed" | "skipped"
+      bindingId: string
+      record: PromptMaterializationRecord
+      conflict?: PromptConflict
+    }>
+    materializeAll: (params?: {
+      workspaceId?: string
+      workspaceRoot?: string
+      overwriteConflict?: boolean
+      variables?: Record<string, string>
+    }) => Promise<
+      Array<{
+        status: "applied" | "conflict" | "failed" | "skipped"
+        bindingId: string
+        record: PromptMaterializationRecord
+        conflict?: PromptConflict
+      }>
+    >
+    history: {
+      list: (params?: {
+        workspaceId?: string
+        bindingId?: string
+        limit?: number
+      }) => Promise<PromptMaterializationRecord[]>
+    }
+    exportPack: (params?: {
+      workspaceId?: string
+      includeBindings?: boolean
+      format?: "json" | "yaml"
+    }) => Promise<{ pack: PromptPack; format: "json" | "yaml"; content: string }>
+    importPack: (params: {
+      content: string
+      format?: "json" | "yaml"
+      workspaceId?: string
+      replaceExisting?: boolean
+    }) => Promise<{ importedAssets: PromptAsset[]; importedBindings: PromptBinding[] }>
+    checkBootstrap: (params?: {
+      workspaceId?: string
+      workspaceRoot?: string
+    }) => Promise<PromptBootstrapCheckResult>
   }
   connectors: {
     list: (workspaceId?: string) => Promise<ConnectorDefinition[]>

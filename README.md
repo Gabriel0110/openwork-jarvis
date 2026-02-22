@@ -21,6 +21,7 @@ agent orchestration, policy-gated actions, and operator-focused observability.
 - Graph topology workspace with persisted layouts, delegation/tool/memory edges, and department grouping.
 - Memory + local RAG system with source indexing, search, memory locks, restore-as-new, and audit visibility.
 - Skills + tools platform with global skill discovery, per-agent skill modes, tool registry CRUD, and custom runtime script tools.
+- Prompt repository system for reusable markdown assets (`AGENTS.md` + generic prompts), workspace/agent bindings, and conflict-safe materialization.
 - Connectors + MCP management surfaces with bundle portability, redaction-safe import/export, telemetry, and trigger simulation.
 - ZeroClaw first-class integration with managed runtime lifecycle, deployment policies, threaded chat speaker mode, and diagnostics.
 - Operator-oriented Home/Settings UX for health, approvals, scheduler/runtime status, local paths, and secure-default controls.
@@ -87,6 +88,20 @@ agent orchestration, policy-gated actions, and operator-focused observability.
 - Custom script tool runtime loading with policy-aware action/category mapping.
 - Disabled-tool enforcement across middleware and resume paths.
 - Safe no-execution tool preview console.
+
+#### Prompt Repository and AGENTS Reuse
+
+- Dedicated Prompts page for managing reusable markdown prompt assets.
+- Supports both `AGENTS.md` and arbitrary `.md` prompts.
+- Discovery overlay from `~/.agents/prompts` with precedence over app-global prompt assets.
+- Managed prompt storage under `~/.openwork/prompts/global` and `~/.openwork/prompts/workspaces/<workspace-id>`.
+- Per-workspace and per-agent prompt bindings with configurable materialization targets.
+- Materialization targets include workspace root and `.agents/<agent-slug>/<file>.md`.
+- Variable render preview with `{{var_name}}` substitution and built-in workspace/agent/date variables.
+- Managed sync with hash-based conflict detection and explicit overwrite flow (no silent clobbering).
+- Materialization history/audit trail persisted in DB (`prompt_materializations`).
+- Prompt pack import/export in JSON or YAML with collision-safe slug handling.
+- Home bootstrap suggestion to apply an `AGENTS.md` prompt when a workspace has none.
 
 #### Connectors and MCP Surface
 

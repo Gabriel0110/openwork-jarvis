@@ -13,6 +13,7 @@ import { registerTemplateHandlers } from "./ipc/templates"
 import { registerSettingsHandlers } from "./ipc/settings"
 import { registerSkillHandlers } from "./ipc/skills"
 import { registerToolHandlers } from "./ipc/tools"
+import { registerPromptHandlers } from "./ipc/prompts"
 import { registerZeroClawHandlers } from "./ipc/zeroclaw"
 import { closeDatabase, initializeDatabase } from "./db"
 import { startTemplateScheduler, stopTemplateScheduler } from "./services/template-scheduler"
@@ -109,6 +110,7 @@ app.whenReady().then(async () => {
   registerSettingsHandlers(ipcMain)
   registerSkillHandlers(ipcMain)
   registerToolHandlers(ipcMain)
+  registerPromptHandlers(ipcMain)
   registerZeroClawHandlers(ipcMain)
   registerThreadHandlers(ipcMain)
   registerModelHandlers(ipcMain)

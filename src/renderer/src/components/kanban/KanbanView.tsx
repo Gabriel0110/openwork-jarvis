@@ -54,6 +54,7 @@ export function KanbanView(): React.JSX.Element {
     setShowMemoryView,
     setShowTemplatesView,
     setShowToolsView,
+    setShowPromptsView,
     setShowZeroClawView
   } = useAppStore()
   const allThreadStates = useAllThreadStates()
@@ -64,6 +65,11 @@ export function KanbanView(): React.JSX.Element {
   const [workspaceActivityHealthy, setWorkspaceActivityHealthy] = useState(true)
   const [configuredProviderCount, setConfiguredProviderCount] = useState(0)
   const [zeroClawDeployments, setZeroClawDeployments] = useState<ZeroClawDeploymentState[]>([])
+  const [promptBootstrapSuggestion, setPromptBootstrapSuggestion] = useState<{
+    shouldSuggest: boolean
+    reason: string
+    workspaceRoot?: string
+  } | null>(null)
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now())
   const workspaceId = useMemo(() => agents[0]?.workspaceId || "default-workspace", [agents])
 
@@ -116,6 +122,28 @@ export function KanbanView(): React.JSX.Element {
     return () => {
       cancelled = true
       clearInterval(timer)
+    }
+  }, [workspaceId])
+
+  useEffect(() => {
+    let cancelled = false
+    const checkBootstrap = async (): Promise<void> => {
+      try {
+        const result = await window.api.prompts.checkBootstrap({ workspaceId })
+        if (!cancelled) {
+          setPromptBootstrapSuggestion({
+            shouldSuggest: result.shouldSuggest,
+            reason: result.reason,
+            workspaceRoot: result.workspaceRoot
+          })
+        }
+      } catch (error) {
+        console.warn("[Kanban] Failed to check prompt bootstrap state.", error)
+      }
+    }
+    void checkBootstrap()
+    return () => {
+      cancelled = true
     }
   }, [workspaceId])
 
@@ -285,6 +313,27 @@ export function KanbanView(): React.JSX.Element {
     <section className="flex h-full flex-col overflow-hidden bg-background">
       <div className="flex-1 overflow-auto">
         <div className="space-y-3 px-8 py-6 pb-0">
+          {promptBootstrapSuggestion?.shouldSuggest && (
+            <div className="rounded-md border border-border bg-background p-4">
+              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Workspace Bootstrap
+              </div>
+              <div className="mt-2 text-sm">
+                No `AGENTS.md` found for this workspace. Apply one from your prompt library.
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {promptBootstrapSuggestion.workspaceRoot || promptBootstrapSuggestion.reason}
+              </div>
+              <Button
+                size="sm"
+                className="mt-3"
+                onClick={() => setShowPromptsView(true, { agentsOnly: true })}
+              >
+                Open Prompt Library
+              </Button>
+            </div>
+          )}
+
           {/* Status blocks row */}
           <div className="grid gap-3 md:grid-cols-6">
             {/* New Session */}
@@ -381,7 +430,7 @@ export function KanbanView(): React.JSX.Element {
             <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Command Cards
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
               <button
                 onClick={() => setShowTemplatesView(true)}
                 className="rounded-md border border-border bg-sidebar px-4 py-3 text-left transition-colors hover:bg-background-interactive"
@@ -417,6 +466,15 @@ export function KanbanView(): React.JSX.Element {
                   Skills
                 </div>
                 <div className="mt-1 text-sm">Tool Matrix</div>
+              </button>
+              <button
+                onClick={() => setShowPromptsView(true)}
+                className="rounded-md border border-border bg-sidebar px-4 py-3 text-left transition-colors hover:bg-background-interactive"
+              >
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Prompts
+                </div>
+                <div className="mt-1 text-sm">Prompt Library</div>
               </button>
               <button
                 onClick={() => setShowMemoryView(true)}

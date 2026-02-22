@@ -118,6 +118,232 @@ export interface SkillDetail {
   content: string
 }
 
+// Prompt repository IPC
+export type PromptAssetScope = "global" | "workspace"
+export type PromptAssetSource = "managed" | "discovered_agents" | "discovered_openwork"
+export type PromptBindingTargetType = "workspace" | "agent"
+export type PromptMaterializeMode = "workspace_root" | "agent_docs"
+export type PromptSyncMode = "managed"
+export type PromptMaterializationStatus = "applied" | "conflict" | "failed" | "skipped"
+export type PromptBindingStatus = "in_sync" | "conflict" | "failed" | "never_applied"
+
+export interface PromptAsset {
+  id: string
+  workspaceId?: string
+  slug: string
+  title: string
+  description?: string
+  fileName: string
+  scope: PromptAssetScope
+  source: PromptAssetSource
+  contentPath: string
+  tags: string[]
+  variables: string[]
+  isSystem: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface PromptBinding {
+  id: string
+  assetId: string
+  workspaceId: string
+  targetType: PromptBindingTargetType
+  targetAgentId?: string
+  materializeMode: PromptMaterializeMode
+  relativeOutputPath?: string
+  syncMode: PromptSyncMode
+  enabled: boolean
+  lastMaterializedHash?: string
+  lastAssetHash?: string
+  lastMaterializedAt?: Date
+  lastError?: string
+  status: PromptBindingStatus
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface PromptMaterializationRecord {
+  id: string
+  bindingId: string
+  workspaceId: string
+  status: PromptMaterializationStatus
+  resolvedPath: string
+  beforeHash?: string
+  afterHash?: string
+  assetHash?: string
+  message?: string
+  createdAt: Date
+}
+
+export interface PromptConflict {
+  bindingId: string
+  assetId: string
+  resolvedPath: string
+  currentHash?: string
+  expectedHash?: string
+  assetHash: string
+  message: string
+  currentContent?: string
+  assetContent?: string
+}
+
+export interface PromptRenderPreview {
+  content: string
+  warnings: string[]
+  variables: Record<string, string>
+  unknownVariables: string[]
+}
+
+export interface PromptListResult {
+  assets: PromptAsset[]
+  effectiveAssets: PromptAsset[]
+  loadedAt: string
+}
+
+export interface PromptPack {
+  version: "1"
+  exportedAt: string
+  workspaceId?: string
+  assets: Array<{
+    assetId?: string
+    slug: string
+    title: string
+    description?: string
+    fileName: string
+    scope: PromptAssetScope
+    workspaceId?: string
+    tags: string[]
+    variables: string[]
+    content: string
+  }>
+  bindings?: PromptBinding[]
+  meta?: {
+    appVersion?: string
+  }
+}
+
+export interface PromptListParams {
+  workspaceId?: string
+  query?: string
+  scope?: PromptAssetScope | "all"
+  source?: PromptAssetSource | "all"
+  agentsOnly?: boolean
+}
+
+export interface PromptGetParams {
+  assetId: string
+}
+
+export interface PromptCreateParams {
+  workspaceId?: string
+  title: string
+  description?: string
+  slug?: string
+  fileName: string
+  scope?: PromptAssetScope
+  tags?: string[]
+  variables?: string[]
+  content: string
+}
+
+export interface PromptUpdateParams {
+  assetId: string
+  updates: Partial<
+    Pick<PromptAsset, "title" | "description" | "slug" | "fileName" | "tags" | "variables">
+  > & {
+    content?: string
+  }
+}
+
+export interface PromptDeleteParams {
+  assetId: string
+}
+
+export interface PromptRenderPreviewParams {
+  assetId?: string
+  content?: string
+  workspaceId?: string
+  workspaceRoot?: string
+  agentId?: string
+  agentName?: string
+  agentRole?: string
+  variables?: Record<string, string>
+}
+
+export interface PromptBindingListParams {
+  workspaceId?: string
+}
+
+export interface PromptBindingCreateParams {
+  assetId: string
+  workspaceId?: string
+  targetType: PromptBindingTargetType
+  targetAgentId?: string
+  materializeMode: PromptMaterializeMode
+  relativeOutputPath?: string
+  enabled?: boolean
+}
+
+export interface PromptBindingUpdateParams {
+  bindingId: string
+  updates: Partial<
+    Pick<
+      PromptBinding,
+      "targetType" | "targetAgentId" | "materializeMode" | "relativeOutputPath" | "enabled"
+    >
+  >
+}
+
+export interface PromptBindingDeleteParams {
+  bindingId: string
+}
+
+export interface PromptMaterializeParams {
+  bindingId: string
+  workspaceRoot?: string
+  overwriteConflict?: boolean
+  variables?: Record<string, string>
+}
+
+export interface PromptMaterializeAllParams {
+  workspaceId?: string
+  workspaceRoot?: string
+  overwriteConflict?: boolean
+  variables?: Record<string, string>
+}
+
+export interface PromptHistoryListParams {
+  workspaceId?: string
+  bindingId?: string
+  limit?: number
+}
+
+export interface PromptExportPackParams {
+  workspaceId?: string
+  includeBindings?: boolean
+  format?: "json" | "yaml"
+}
+
+export interface PromptImportPackParams {
+  content: string
+  format?: "json" | "yaml"
+  workspaceId?: string
+  replaceExisting?: boolean
+}
+
+export interface PromptBootstrapCheckParams {
+  workspaceId?: string
+  workspaceRoot?: string
+}
+
+export interface PromptBootstrapCheckResult {
+  shouldSuggest: boolean
+  workspaceId?: string
+  workspaceRoot?: string
+  reason: string
+}
+
 // Timeline and graph IPC
 export type TimelineEventType =
   | "user_message"
@@ -963,6 +1189,8 @@ export interface SettingsStorageLocations {
   zeroClawRuntimeDir: string
   zeroClawDeploymentsDir: string
   zeroClawLogsDir: string
+  promptsRootDir: string
+  promptsGlobalDir: string
 }
 
 // =============================================================================

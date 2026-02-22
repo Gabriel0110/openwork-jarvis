@@ -60,8 +60,11 @@ NOTE: Always write great code. This is a non-negotiable.
 
 - `src/main/`: Electron main process, IPC handlers, agent runtime, DB/storage
 - `src/main/zeroclaw/`: ZeroClaw managed runtime installer, supervisor, config, health/events bridge
+- `src/main/services/prompt-*.ts`: prompt library discovery, render, and materialization services
+- `src/main/ipc/prompts.ts`: prompt repository IPC handlers (`prompts:*`)
 - `src/preload/`: Electron preload bridge and API typing
 - `src/renderer/src/`: React UI, state store, panels, chat/tabs, utilities
+- `src/renderer/src/components/prompts/`: Prompt Repository UI
 - `src/main/db/migrations/`: schema migrations and migration runner
 - `tests/unit/`: unit tests (Vitest)
 - `tests/smoke/`: desktop smoke tests (Playwright)
@@ -73,6 +76,13 @@ ZeroClaw data and runtime layout (generated at runtime):
 - `~/.openwork/zeroclaw/runtime/`: versioned managed ZeroClaw binaries
 - `~/.openwork/zeroclaw/deployments/<deployment-id>/`: config/env/log artifacts per deployment
 - DB tables: `zeroclaw_installations`, `zeroclaw_deployments`, `zeroclaw_runtime_events`, `zeroclaw_policy_bindings`
+
+Prompt repository data layout (generated at runtime):
+
+- `~/.openwork/prompts/global/`: managed global prompt assets
+- `~/.openwork/prompts/workspaces/<workspace-id>/`: managed workspace-scoped prompt assets
+- Discovery roots: `~/.agents/prompts` (priority), `~/.openwork/prompts/global`
+- DB tables: `prompt_assets`, `prompt_bindings`, `prompt_materializations`
 
 ## 5) Style Rules (Enforced + Observed)
 

@@ -18,6 +18,14 @@ import type {
   PolicyRule,
   PolicyUpsertParams,
   Provider,
+  PromptAsset,
+  PromptBinding,
+  PromptBootstrapCheckResult,
+  PromptConflict,
+  PromptListResult,
+  PromptMaterializationRecord,
+  PromptPack,
+  PromptRenderPreview,
   RagIndexResult,
   RagSource,
   SecurityDefaults,
@@ -370,6 +378,157 @@ const api = {
     },
     delete: (toolId: string): Promise<void> => {
       return ipcRenderer.invoke("tools:delete", { toolId })
+    }
+  },
+  prompts: {
+    list: (params?: {
+      workspaceId?: string
+      query?: string
+      scope?: "global" | "workspace" | "all"
+      source?: "managed" | "discovered_agents" | "discovered_openwork" | "all"
+      agentsOnly?: boolean
+    }): Promise<PromptListResult> => {
+      return ipcRenderer.invoke("prompts:list", params)
+    },
+    get: (assetId: string): Promise<{ asset: PromptAsset; content: string }> => {
+      return ipcRenderer.invoke("prompts:get", { assetId })
+    },
+    create: (params: {
+      workspaceId?: string
+      title: string
+      description?: string
+      slug?: string
+      fileName: string
+      scope?: "global" | "workspace"
+      tags?: string[]
+      variables?: string[]
+      content: string
+    }): Promise<PromptAsset> => {
+      return ipcRenderer.invoke("prompts:create", params)
+    },
+    update: (
+      assetId: string,
+      updates: {
+        title?: string
+        description?: string
+        slug?: string
+        fileName?: string
+        tags?: string[]
+        variables?: string[]
+        content?: string
+      }
+    ): Promise<PromptAsset> => {
+      return ipcRenderer.invoke("prompts:update", { assetId, updates })
+    },
+    delete: (assetId: string): Promise<void> => {
+      return ipcRenderer.invoke("prompts:delete", { assetId })
+    },
+    refreshDiscovery: (): Promise<PromptListResult> => {
+      return ipcRenderer.invoke("prompts:refreshDiscovery")
+    },
+    renderPreview: (params: {
+      assetId?: string
+      content?: string
+      workspaceId?: string
+      workspaceRoot?: string
+      agentId?: string
+      agentName?: string
+      agentRole?: string
+      variables?: Record<string, string>
+    }): Promise<PromptRenderPreview> => {
+      return ipcRenderer.invoke("prompts:renderPreview", params)
+    },
+    bindings: {
+      list: (workspaceId?: string): Promise<PromptBinding[]> => {
+        return ipcRenderer.invoke(
+          "prompts:bindings:list",
+          workspaceId ? { workspaceId } : undefined
+        )
+      },
+      create: (params: {
+        assetId: string
+        workspaceId?: string
+        targetType: "workspace" | "agent"
+        targetAgentId?: string
+        materializeMode: "workspace_root" | "agent_docs"
+        relativeOutputPath?: string
+        enabled?: boolean
+      }): Promise<PromptBinding> => {
+        return ipcRenderer.invoke("prompts:bindings:create", params)
+      },
+      update: (
+        bindingId: string,
+        updates: {
+          targetType?: "workspace" | "agent"
+          targetAgentId?: string
+          materializeMode?: "workspace_root" | "agent_docs"
+          relativeOutputPath?: string
+          enabled?: boolean
+        }
+      ): Promise<PromptBinding> => {
+        return ipcRenderer.invoke("prompts:bindings:update", { bindingId, updates })
+      },
+      delete: (bindingId: string): Promise<void> => {
+        return ipcRenderer.invoke("prompts:bindings:delete", { bindingId })
+      }
+    },
+    materialize: (params: {
+      bindingId: string
+      workspaceRoot?: string
+      overwriteConflict?: boolean
+      variables?: Record<string, string>
+    }): Promise<{
+      status: "applied" | "conflict" | "failed" | "skipped"
+      bindingId: string
+      record: PromptMaterializationRecord
+      conflict?: PromptConflict
+    }> => {
+      return ipcRenderer.invoke("prompts:materialize", params)
+    },
+    materializeAll: (params?: {
+      workspaceId?: string
+      workspaceRoot?: string
+      overwriteConflict?: boolean
+      variables?: Record<string, string>
+    }): Promise<
+      Array<{
+        status: "applied" | "conflict" | "failed" | "skipped"
+        bindingId: string
+        record: PromptMaterializationRecord
+        conflict?: PromptConflict
+      }>
+    > => {
+      return ipcRenderer.invoke("prompts:materializeAll", params)
+    },
+    history: {
+      list: (params?: {
+        workspaceId?: string
+        bindingId?: string
+        limit?: number
+      }): Promise<PromptMaterializationRecord[]> => {
+        return ipcRenderer.invoke("prompts:history:list", params)
+      }
+    },
+    exportPack: (params?: {
+      workspaceId?: string
+      includeBindings?: boolean
+      format?: "json" | "yaml"
+    }): Promise<{ pack: PromptPack; format: "json" | "yaml"; content: string }> => {
+      return ipcRenderer.invoke("prompts:exportPack", params)
+    },
+    importPack: (params: {
+      content: string
+      format?: "json" | "yaml"
+      workspaceId?: string
+      replaceExisting?: boolean
+    }): Promise<{ importedAssets: PromptAsset[]; importedBindings: PromptBinding[] }> => {
+      return ipcRenderer.invoke("prompts:importPack", params)
+    },
+    checkBootstrap: (params?: {
+      workspaceId?: string
+      workspaceRoot?: string
+    }): Promise<PromptBootstrapCheckResult> => {
+      return ipcRenderer.invoke("prompts:checkBootstrap", params)
     }
   },
   connectors: {

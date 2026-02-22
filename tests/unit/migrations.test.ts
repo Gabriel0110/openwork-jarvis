@@ -130,6 +130,18 @@ describe("database migrations", () => {
       db,
       "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'zeroclaw_policy_bindings'"
     )
+    const promptAssetsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'prompt_assets'"
+    )
+    const promptBindingsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'prompt_bindings'"
+    )
+    const promptMaterializationsTableCount = getSingleNumber(
+      db,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'prompt_materializations'"
+    )
     const migrationCount = getSingleNumber(db, "SELECT COUNT(*) FROM schema_migrations")
     const hasTemplateScheduleColumn = hasColumn(db, "workflow_templates", "schedule_config")
     const hasTemplateTriggerColumn = hasColumn(db, "workflow_templates", "trigger_config")
@@ -158,6 +170,9 @@ describe("database migrations", () => {
     expect(zeroClawDeploymentsTableCount).toBe(1)
     expect(zeroClawRuntimeEventsTableCount).toBe(1)
     expect(zeroClawPolicyBindingsTableCount).toBe(1)
+    expect(promptAssetsTableCount).toBe(1)
+    expect(promptBindingsTableCount).toBe(1)
+    expect(promptMaterializationsTableCount).toBe(1)
     expect(hasTemplateScheduleColumn).toBe(true)
     expect(hasTemplateTriggerColumn).toBe(true)
     expect(hasMemoryLockedColumn).toBe(true)
@@ -165,6 +180,6 @@ describe("database migrations", () => {
     expect(hasAgentSkillsAllowlistColumn).toBe(true)
     expect(hasToolSourceColumn).toBe(true)
     expect(hasToolImplementationColumn).toBe(true)
-    expect(migrationCount).toBe(13)
+    expect(migrationCount).toBe(14)
   })
 })

@@ -12,6 +12,7 @@ import { migration0010MemoryEntryLocks } from "./0010-memory-entry-locks"
 import { migration0011AgentSkills } from "./0011-agent-skills"
 import { migration0012ToolRegistry } from "./0012-tool-registry"
 import { migration0013ZeroClawCore } from "./0013-zeroclaw-core"
+import { migration0014PromptLibrary } from "./0014-prompt-library"
 import type { Migration } from "./types"
 
 const MIGRATIONS: Migration[] = [
@@ -27,7 +28,8 @@ const MIGRATIONS: Migration[] = [
   migration0010MemoryEntryLocks,
   migration0011AgentSkills,
   migration0012ToolRegistry,
-  migration0013ZeroClawCore
+  migration0013ZeroClawCore,
+  migration0014PromptLibrary
 ]
 
 function ensureMigrationsTable(db: SqlJsDatabase): void {

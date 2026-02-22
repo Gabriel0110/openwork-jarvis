@@ -9,6 +9,7 @@ import { MemoryView } from "@/components/memory/MemoryView"
 import { ConnectorsView } from "@/components/connectors/ConnectorsView"
 import { TemplatesView } from "@/components/templates/TemplatesView"
 import { ToolsView } from "@/components/tools/ToolsView"
+import { PromptsView } from "@/components/prompts/PromptsView"
 import { ZeroClawView } from "@/components/zeroclaw/ZeroClawView"
 import { SettingsView } from "@/components/settings/SettingsView"
 import { ResizeHandle } from "@/components/ui/resizable"
@@ -35,6 +36,7 @@ function App(): React.JSX.Element {
     showConnectorsView,
     showTemplatesView,
     showToolsView,
+    showPromptsView,
     showZeroClawView,
     showSettingsView,
     loadAgents
@@ -183,6 +185,8 @@ function App(): React.JSX.Element {
                 <div className="h-full px-4 flex items-center text-section-header">
                   SKILLS/TOOLS
                 </div>
+              ) : showPromptsView ? (
+                <div className="h-full px-4 flex items-center text-section-header">PROMPTS</div>
               ) : showZeroClawView ? (
                 <div className="h-full px-4 flex items-center text-section-header">ZEROCLAW</div>
               ) : showSettingsView ? (
@@ -231,6 +235,10 @@ function App(): React.JSX.Element {
               <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
                 <ToolsView />
               </main>
+            ) : showPromptsView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <PromptsView />
+              </main>
             ) : showZeroClawView ? (
               <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
                 <ZeroClawView />
@@ -263,6 +271,7 @@ function App(): React.JSX.Element {
           !showConnectorsView &&
           !showTemplatesView &&
           !showToolsView &&
+          !showPromptsView &&
           !showZeroClawView &&
           !showSettingsView && (
             <>

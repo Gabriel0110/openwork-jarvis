@@ -28,6 +28,8 @@ interface AppState {
   showMemoryView: boolean
   showConnectorsView: boolean
   showToolsView: boolean
+  showPromptsView: boolean
+  promptsAgentsOnly: boolean
   showZeroClawView: boolean
   zeroClawDeploymentFocusId: string | null
   showSettingsView: boolean
@@ -89,6 +91,8 @@ interface AppState {
   setShowMemoryView: (show: boolean) => void
   setShowConnectorsView: (show: boolean) => void
   setShowToolsView: (show: boolean) => void
+  setShowPromptsView: (show: boolean, options?: { agentsOnly?: boolean }) => void
+  setPromptsAgentsOnly: (agentsOnly: boolean) => void
   setShowZeroClawView: (show: boolean, deploymentId?: string | null) => void
   setZeroClawDeploymentFocusId: (deploymentId: string | null) => void
   setShowSettingsView: (show: boolean) => void
@@ -113,6 +117,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   showMemoryView: false,
   showConnectorsView: false,
   showToolsView: false,
+  showPromptsView: false,
+  promptsAgentsOnly: false,
   showZeroClawView: false,
   zeroClawDeploymentFocusId: null,
   showSettingsView: false,
@@ -141,6 +147,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       showMemoryView: false,
       showConnectorsView: false,
       showToolsView: false,
+      showPromptsView: false,
+      promptsAgentsOnly: false,
       showZeroClawView: false,
       showSettingsView: false,
       showTemplatesView: false,
@@ -160,6 +168,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       showMemoryView: false,
       showConnectorsView: false,
       showToolsView: false,
+      showPromptsView: false,
+      promptsAgentsOnly: false,
       showZeroClawView: false,
       showSettingsView: false,
       showTemplatesView: false,
@@ -291,6 +301,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         showMemoryView: false,
         showConnectorsView: false,
         showToolsView: false,
+        showPromptsView: false,
+        promptsAgentsOnly: false,
         showZeroClawView: false,
         showSettingsView: false,
         showTemplatesView: false,
@@ -315,6 +327,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         showMemoryView: false,
         showConnectorsView: false,
         showToolsView: false,
+        showPromptsView: false,
+        promptsAgentsOnly: false,
         showZeroClawView: false,
         showSettingsView: false,
         showTemplatesView: false,
@@ -335,6 +349,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         showMemoryView: false,
         showConnectorsView: false,
         showToolsView: false,
+        showPromptsView: false,
+        promptsAgentsOnly: false,
         showZeroClawView: false,
         showSettingsView: false,
         showTemplatesView: false,
@@ -354,6 +370,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         showGraphView: false,
         showConnectorsView: false,
         showToolsView: false,
+        showPromptsView: false,
+        promptsAgentsOnly: false,
         showZeroClawView: false,
         showSettingsView: false,
         showTemplatesView: false,
@@ -373,6 +391,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         showGraphView: false,
         showMemoryView: false,
         showToolsView: false,
+        showPromptsView: false,
+        promptsAgentsOnly: false,
         showZeroClawView: false,
         showSettingsView: false,
         showTemplatesView: false,
@@ -393,6 +413,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         showMemoryView: false,
         showConnectorsView: false,
         showToolsView: false,
+        showPromptsView: false,
+        promptsAgentsOnly: false,
         showZeroClawView: false,
         showSettingsView: false,
         selectedTemplateId:
@@ -413,6 +435,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         showMemoryView: false,
         showConnectorsView: false,
         showTemplatesView: false,
+        showPromptsView: false,
+        promptsAgentsOnly: false,
         showZeroClawView: false,
         showSettingsView: false,
         selectedTemplateId: null
@@ -420,6 +444,31 @@ export const useAppStore = create<AppState>((set, get) => ({
     } else {
       set({ showToolsView: false })
     }
+  },
+
+  setShowPromptsView: (show: boolean, options?: { agentsOnly?: boolean }) => {
+    if (show) {
+      set({
+        showPromptsView: true,
+        promptsAgentsOnly: options?.agentsOnly === true,
+        showKanbanView: false,
+        showAgentsView: false,
+        showGraphView: false,
+        showMemoryView: false,
+        showConnectorsView: false,
+        showToolsView: false,
+        showTemplatesView: false,
+        showZeroClawView: false,
+        showSettingsView: false,
+        selectedTemplateId: null
+      })
+    } else {
+      set({ showPromptsView: false, promptsAgentsOnly: false })
+    }
+  },
+
+  setPromptsAgentsOnly: (agentsOnly: boolean) => {
+    set({ promptsAgentsOnly: agentsOnly })
   },
 
   setShowZeroClawView: (show: boolean, deploymentId?: string | null) => {
@@ -433,6 +482,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         showConnectorsView: false,
         showTemplatesView: false,
         showToolsView: false,
+        showPromptsView: false,
+        promptsAgentsOnly: false,
         showSettingsView: false,
         selectedTemplateId: null,
         zeroClawDeploymentFocusId:
@@ -460,6 +511,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         showMemoryView: false,
         showConnectorsView: false,
         showToolsView: false,
+        showPromptsView: false,
+        promptsAgentsOnly: false,
         showZeroClawView: false,
         showTemplatesView: false,
         selectedTemplateId: null
