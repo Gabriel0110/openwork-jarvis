@@ -18,6 +18,10 @@ import {
 } from "../services/policy-engine"
 import { grantPolicySessionAccess } from "../services/policy-session"
 import { normalizeAgentSkillMode } from "../services/skills-registry"
+import {
+  buildMessageWithMentionContext,
+  buildWorkspaceMentionContext
+} from "../services/workspace-file-mentions"
 import type {
   AgentInvokeParams,
   AgentResumeParams,
@@ -623,6 +627,20 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined
 }
 
+function optionalStringArray(value: unknown, fieldName: string): string[] | undefined {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid ${fieldName}: expected string array.`)
+  }
+  const normalized = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+  return normalized.length > 0 ? normalized : undefined
+}
+
 function optionalSpeakerType(value: unknown): "orchestrator" | "agent" | "zeroclaw" | undefined {
   if (value === undefined || value === null || value === "") {
     return undefined
@@ -638,6 +656,7 @@ function parseAgentInvokeParams(payload: unknown): AgentInvokeParams {
   return {
     threadId: requireString(record.threadId, "threadId"),
     message: requireString(record.message, "message"),
+    referencedFiles: optionalStringArray(record.referencedFiles, "referencedFiles"),
     modelId: optionalString(record.modelId),
     speakerType: optionalSpeakerType(record.speakerType),
     speakerAgentId: optionalString(record.speakerAgentId)
@@ -730,6 +749,7 @@ export function registerAgentHandlers(ipcMain: IpcMain): void {
   ipcMain.on("agent:invoke", async (event, payload: unknown) => {
     let threadId = ""
     let message = ""
+    let referencedFiles: string[] | undefined
     let modelId: string | undefined
     let speakerType: "orchestrator" | "agent" | "zeroclaw" | undefined
     let speakerAgentId: string | undefined
@@ -737,6 +757,7 @@ export function registerAgentHandlers(ipcMain: IpcMain): void {
       const parsed = parseAgentInvokeParams(payload)
       threadId = parsed.threadId
       message = parsed.message
+      referencedFiles = parsed.referencedFiles
       modelId = parsed.modelId
       speakerType = parsed.speakerType
       speakerAgentId = parsed.speakerAgentId
@@ -802,6 +823,24 @@ export function registerAgentHandlers(ipcMain: IpcMain): void {
         return
       }
 
+      const mentionContext = await buildWorkspaceMentionContext({
+        message,
+        workspacePath,
+        explicitMentions: referencedFiles
+      })
+      const fileMentionPayload =
+        mentionContext.mentions.length > 0
+          ? {
+              mentions: mentionContext.mentions,
+              resolvedFiles: mentionContext.files.map((file) => ({
+                path: file.relativePath,
+                bytes: file.bytes,
+                truncated: file.truncated
+              })),
+              skipped: mentionContext.skipped
+            }
+          : undefined
+
       if (speakerType === "zeroclaw") {
         const deploymentId = speakerAgentId?.trim()
         if (!deploymentId) {
@@ -829,14 +868,16 @@ export function registerAgentHandlers(ipcMain: IpcMain): void {
           summary: trimSummary(message),
           payload: {
             speakerType: "zeroclaw",
-            deploymentId
+            deploymentId,
+            fileMentions: fileMentionPayload
           }
         })
 
         const messageId = crypto.randomUUID()
+        const zeroClawMessage = buildMessageWithMentionContext(message, mentionContext.contextBlock)
         const result = await invokeZeroClawSpeaker(
           deploymentId,
-          message,
+          zeroClawMessage,
           abortController.signal,
           (token) => {
             if (abortController.signal.aborted || !token) {
@@ -892,7 +933,8 @@ export function registerAgentHandlers(ipcMain: IpcMain): void {
         sourceAgentId: speaker?.id,
         summary: trimSummary(message),
         payload: {
-          speakerType: speaker?.type || "orchestrator"
+          speakerType: speaker?.type || "orchestrator",
+          fileMentions: fileMentionPayload
         }
       })
       const resolvedModelId = modelId || speaker?.modelName
@@ -901,7 +943,8 @@ export function registerAgentHandlers(ipcMain: IpcMain): void {
         workspacePath,
         workspaceId,
         modelId: resolvedModelId,
-        speaker
+        speaker,
+        invocationContext: mentionContext.contextBlock
       })
       const humanMessage = new HumanMessage(message)
 

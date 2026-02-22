@@ -96,7 +96,8 @@ const api = {
       onEvent: (event: StreamEvent) => void,
       modelId?: string,
       speakerType?: "orchestrator" | "agent" | "zeroclaw",
-      speakerAgentId?: string
+      speakerAgentId?: string,
+      referencedFiles?: string[]
     ): (() => void) => {
       const channel = `agent:stream:${threadId}`
 
@@ -111,6 +112,7 @@ const api = {
       ipcRenderer.send("agent:invoke", {
         threadId,
         message,
+        referencedFiles,
         modelId,
         speakerType,
         speakerAgentId
@@ -129,7 +131,8 @@ const api = {
       onEvent: (event: StreamEvent) => void,
       modelId?: string,
       speakerType?: "orchestrator" | "agent" | "zeroclaw",
-      speakerAgentId?: string
+      speakerAgentId?: string,
+      referencedFiles?: string[]
     ): (() => void) => {
       const channel = `agent:stream:${threadId}`
 
@@ -155,6 +158,7 @@ const api = {
         ipcRenderer.send("agent:invoke", {
           threadId,
           message,
+          referencedFiles,
           modelId,
           speakerType,
           speakerAgentId

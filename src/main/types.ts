@@ -9,6 +9,7 @@ export type ThreadStatus = "idle" | "busy" | "interrupted" | "error"
 export interface AgentInvokeParams {
   threadId: string
   message: string
+  referencedFiles?: string[]
   modelId?: string
   speakerType?: "orchestrator" | "agent" | "zeroclaw"
   speakerAgentId?: string

@@ -1,5 +1,5 @@
-import { useRef, useEffect, useMemo, useCallback } from "react"
-import { Send, Square, Loader2, AlertCircle, X } from "lucide-react"
+import { useRef, useEffect, useMemo, useCallback, useState } from "react"
+import { Send, Square, Loader2, AlertCircle, X, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAppStore } from "@/lib/store"
@@ -31,10 +31,106 @@ interface ChatContainerProps {
   threadId: string
 }
 
+interface MentionQueryState {
+  query: string
+  start: number
+  end: number
+}
+
+interface MentionSuggestion {
+  path: string
+  name: string
+  directory: string
+  score: number
+}
+
+const MAX_MENTION_SUGGESTIONS = 40
+
+function parseMentionQuery(input: string, caretPosition: number): MentionQueryState | null {
+  const beforeCaret = input.slice(0, caretPosition)
+  const match = beforeCaret.match(/(?:^|\s)@([^\s@]*)$/)
+  if (!match) {
+    return null
+  }
+
+  const query = match[1] || ""
+  const start = caretPosition - query.length - 1
+  if (start < 0) {
+    return null
+  }
+
+  return {
+    query,
+    start,
+    end: caretPosition
+  }
+}
+
+function scoreMentionSuggestion(filePath: string, query: string): MentionSuggestion | null {
+  const normalizedPath = filePath.startsWith("/") ? filePath : `/${filePath}`
+  const segments = normalizedPath.split("/").filter(Boolean)
+  const fileName = segments[segments.length - 1] || normalizedPath
+  const directory = segments.length > 1 ? `/${segments.slice(0, -1).join("/")}` : "/"
+
+  if (!query) {
+    return {
+      path: normalizedPath,
+      name: fileName,
+      directory,
+      score: 300
+    }
+  }
+
+  const lowerQuery = query.toLowerCase()
+  const lowerName = fileName.toLowerCase()
+  const lowerPath = normalizedPath.toLowerCase()
+
+  if (lowerName === lowerQuery) {
+    return {
+      path: normalizedPath,
+      name: fileName,
+      directory,
+      score: 0
+    }
+  }
+
+  if (lowerName.startsWith(lowerQuery)) {
+    return {
+      path: normalizedPath,
+      name: fileName,
+      directory,
+      score: 10
+    }
+  }
+
+  if (lowerName.includes(lowerQuery)) {
+    return {
+      path: normalizedPath,
+      name: fileName,
+      directory,
+      score: 100
+    }
+  }
+
+  if (lowerPath.includes(lowerQuery)) {
+    return {
+      path: normalizedPath,
+      name: fileName,
+      directory,
+      score: 200
+    }
+  }
+
+  return null
+}
+
 export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Element {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
+  const [mentionQuery, setMentionQuery] = useState<MentionQueryState | null>(null)
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0)
+  const [attachedMentions, setAttachedMentions] = useState<MentionSuggestion[]>([])
 
   const { threads, loadThreads, generateTitleForFirstMessage } = useAppStore()
 
@@ -45,6 +141,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     todos,
     error: threadError,
     workspacePath,
+    workspaceFiles,
     tokenUsage,
     currentModel,
     speakerType,
@@ -57,7 +154,8 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     appendMessage,
     setError,
     clearError,
-    setDraftInput: setInput
+    setDraftInput: setInput,
+    openFile
   } = useCurrentThread(threadId)
 
   // Get the stream data via subscription - reactive updates without re-rendering provider
@@ -263,6 +361,116 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     clearError()
   }
 
+  const mentionSuggestions = useMemo(() => {
+    if (!workspacePath || !mentionQuery) {
+      return [] as MentionSuggestion[]
+    }
+
+    const dedupe = new Set<string>()
+    const candidates: MentionSuggestion[] = []
+
+    for (const entry of workspaceFiles) {
+      if (entry.is_dir) {
+        continue
+      }
+      const normalizedPath = entry.path.startsWith("/") ? entry.path : `/${entry.path}`
+      if (dedupe.has(normalizedPath)) {
+        continue
+      }
+      if (attachedMentions.some((item) => item.path === normalizedPath)) {
+        continue
+      }
+      dedupe.add(normalizedPath)
+
+      const scored = scoreMentionSuggestion(normalizedPath, mentionQuery.query)
+      if (scored) {
+        candidates.push(scored)
+      }
+    }
+
+    candidates.sort((a, b) => {
+      if (a.score !== b.score) {
+        return a.score - b.score
+      }
+      if (a.name.length !== b.name.length) {
+        return a.name.length - b.name.length
+      }
+      return a.path.localeCompare(b.path)
+    })
+
+    return candidates.slice(0, MAX_MENTION_SUGGESTIONS)
+  }, [workspaceFiles, workspacePath, mentionQuery, attachedMentions])
+
+  const effectiveActiveMentionIndex =
+    mentionSuggestions.length === 0
+      ? 0
+      : Math.min(activeMentionIndex, mentionSuggestions.length - 1)
+
+  const closeMentionSuggestions = useCallback(() => {
+    setMentionQuery(null)
+    setActiveMentionIndex(0)
+  }, [])
+
+  const updateMentionQuery = useCallback(
+    (nextInput: string, caretPosition?: number) => {
+      if (!workspacePath) {
+        closeMentionSuggestions()
+        return
+      }
+
+      const cursor = caretPosition ?? nextInput.length
+      const nextMentionQuery = parseMentionQuery(nextInput, cursor)
+      if (!nextMentionQuery) {
+        closeMentionSuggestions()
+        return
+      }
+
+      setMentionQuery(nextMentionQuery)
+      setActiveMentionIndex(0)
+    },
+    [closeMentionSuggestions, workspacePath]
+  )
+
+  const applyMentionSuggestion = useCallback(
+    (suggestion: MentionSuggestion) => {
+      if (!mentionQuery) {
+        return
+      }
+
+      const before = input.slice(0, mentionQuery.start)
+      const after = input.slice(mentionQuery.end)
+      const nextInput = `${before}${after}`.replace(/\s{2,}/g, " ")
+      const caret = Math.min(before.length, nextInput.length)
+
+      setInput(nextInput)
+      setAttachedMentions((previous) => {
+        if (previous.some((item) => item.path === suggestion.path)) {
+          return previous
+        }
+        return [...previous, suggestion]
+      })
+      closeMentionSuggestions()
+
+      queueMicrotask(() => {
+        if (!inputRef.current) {
+          return
+        }
+        inputRef.current.focus()
+        inputRef.current.setSelectionRange(caret, caret)
+      })
+    },
+    [closeMentionSuggestions, input, mentionQuery, setInput]
+  )
+
+  const removeAttachedMention = useCallback((pathToRemove: string): void => {
+    setAttachedMentions((previous) => previous.filter((mention) => mention.path !== pathToRemove))
+  }, [])
+
+  const handleInputChange = (value: string): void => {
+    setInput(value)
+    updateMentionQuery(value, inputRef.current?.selectionStart ?? value.length)
+  }
+
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
     if (!input.trim() || isLoading || !stream) return
@@ -281,7 +489,10 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     }
 
     const message = input.trim()
+    const referencedFiles = attachedMentions.map((mention) => mention.path)
     setInput("")
+    setAttachedMentions([])
+    closeMentionSuggestions()
 
     const isFirstMessage = threadMessages.length === 0
 
@@ -303,7 +514,8 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
 
     await stream.submit(
       {
-        messages: [{ type: "human", content: message }]
+        messages: [{ type: "human", content: message }],
+        referencedFiles
       },
       {
         config: {
@@ -318,7 +530,49 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     )
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent): void => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (
+      e.key === "Backspace" &&
+      !mentionQuery &&
+      e.currentTarget.value.length === 0 &&
+      attachedMentions.length > 0
+    ) {
+      e.preventDefault()
+      const lastMention = attachedMentions[attachedMentions.length - 1]
+      if (lastMention) {
+        removeAttachedMention(lastMention.path)
+      }
+      return
+    }
+
+    if (mentionQuery && mentionSuggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setActiveMentionIndex((prev) => (prev + 1) % mentionSuggestions.length)
+        return
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setActiveMentionIndex((prev) =>
+          prev <= 0 ? mentionSuggestions.length - 1 : Math.max(0, prev - 1)
+        )
+        return
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault()
+        const candidate = mentionSuggestions[effectiveActiveMentionIndex]
+        if (candidate) {
+          applyMentionSuggestion(candidate)
+        }
+        return
+      }
+      if (e.key === "Escape") {
+        e.preventDefault()
+        closeMentionSuggestions()
+        return
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSubmit(e)
@@ -464,18 +718,68 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       <div className="border-t border-border p-4">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
           <div className="flex flex-col gap-2">
-            <div className="flex items-end gap-2">
+            <div className="relative flex items-end gap-2">
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onClick={(e) =>
+                  updateMentionQuery(e.currentTarget.value, e.currentTarget.selectionStart)
+                }
+                onKeyUp={(e) =>
+                  updateMentionQuery(e.currentTarget.value, e.currentTarget.selectionStart)
+                }
+                onBlur={() => {
+                  setTimeout(() => {
+                    closeMentionSuggestions()
+                  }, 120)
+                }}
                 placeholder="Message..."
                 disabled={isLoading}
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
                 className="flex-1 min-w-0 resize-none rounded-sm border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                 rows={1}
                 style={{ minHeight: "48px", maxHeight: "200px" }}
               />
+              {mentionQuery && mentionSuggestions.length > 0 && (
+                <div className="absolute left-0 right-[56px] bottom-[calc(100%+8px)] z-30 max-h-72 overflow-auto rounded-md border border-border bg-background/95 backdrop-blur-sm shadow-2xl">
+                  <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border/60">
+                    Type to search for files
+                  </div>
+                  <div className="py-1">
+                    {mentionSuggestions.map((suggestion, index) => (
+                      <button
+                        key={suggestion.path}
+                        type="button"
+                        className={`w-full px-3 py-2 text-left flex items-center gap-3 ${
+                          index === effectiveActiveMentionIndex
+                            ? "bg-accent/70"
+                            : "hover:bg-accent/40"
+                        }`}
+                        onMouseDown={(event) => {
+                          event.preventDefault()
+                          applyMentionSuggestion(suggestion)
+                        }}
+                      >
+                        <span className="inline-flex size-5 items-center justify-center rounded-sm border border-border/80 text-[10px] font-semibold text-muted-foreground">
+                          {suggestion.name.split(".").pop()?.slice(0, 2).toUpperCase() || "FI"}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm text-foreground">
+                            {suggestion.name}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {suggestion.directory}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-center shrink-0 h-12">
                 {isLoading ? (
                   <Button type="button" variant="ghost" size="icon" onClick={handleCancel}>
@@ -494,6 +798,38 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
                 )}
               </div>
             </div>
+            {attachedMentions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {attachedMentions.map((mention) => (
+                  <button
+                    key={mention.path}
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-md border border-border/70 bg-accent/50 px-2.5 py-1 text-xs text-foreground transition-colors hover:bg-accent"
+                    onClick={() => openFile(mention.path, mention.name)}
+                    title={`Open ${mention.path}`}
+                  >
+                    <span className="inline-flex size-4 items-center justify-center rounded-sm bg-primary/15 text-primary">
+                      <FileText className="size-3" />
+                    </span>
+                    <span className="max-w-[220px] truncate font-medium">{mention.name}</span>
+                    <span className="max-w-[180px] truncate text-muted-foreground">
+                      {mention.directory}
+                    </span>
+                    <span
+                      className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        removeAttachedMention(mention.path)
+                      }}
+                      aria-label={`Remove ${mention.name}`}
+                    >
+                      <X className="size-3" />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <SpeakerPicker threadId={threadId} />

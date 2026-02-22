@@ -86,7 +86,8 @@ interface CustomAPI {
       onEvent: (event: StreamEvent) => void,
       modelId?: string,
       speakerType?: "orchestrator" | "agent" | "zeroclaw",
-      speakerAgentId?: string
+      speakerAgentId?: string,
+      referencedFiles?: string[]
     ) => () => void
     streamAgent: (
       threadId: string,
@@ -95,7 +96,8 @@ interface CustomAPI {
       onEvent: (event: StreamEvent) => void,
       modelId?: string,
       speakerType?: "orchestrator" | "agent" | "zeroclaw",
-      speakerAgentId?: string
+      speakerAgentId?: string,
+      referencedFiles?: string[]
     ) => () => void
     interrupt: (
       threadId: string,

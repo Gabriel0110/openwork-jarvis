@@ -110,16 +110,35 @@ To use a skill, call the \`read_skill\` tool with the exact skill name and follo
 `
 }
 
+function applyInvocationContextPrompt(basePrompt: string, invocationContext?: string): string {
+  if (!invocationContext || invocationContext.trim().length === 0) {
+    return basePrompt
+  }
+
+  return `${basePrompt}
+
+### File Mentions Context
+
+The user referenced workspace files with @ mentions. Use this context while responding to the current request:
+
+${invocationContext.trim()}
+`
+}
+
 function getSpeakerSystemPrompt(
   workspacePath: string,
   assignedSkills: SkillDefinition[],
   skillMode: AgentSkillMode,
+  invocationContext?: string,
   speaker?: CreateAgentRuntimeOptions["speaker"]
 ): string {
   const basePrompt = getSystemPrompt(workspacePath)
 
   if (!speaker || speaker.type === "orchestrator") {
-    return applySkillRegistryPrompt(basePrompt, skillMode, assignedSkills)
+    return applyInvocationContextPrompt(
+      applySkillRegistryPrompt(basePrompt, skillMode, assignedSkills),
+      invocationContext
+    )
   }
 
   const speakerSection = `
@@ -132,7 +151,10 @@ Specialized instructions:
 ${speaker.systemPrompt}
 `
 
-  return applySkillRegistryPrompt(`${speakerSection}\n${basePrompt}`, skillMode, assignedSkills)
+  return applyInvocationContextPrompt(
+    applySkillRegistryPrompt(`${speakerSection}\n${basePrompt}`, skillMode, assignedSkills),
+    invocationContext
+  )
 }
 
 function parseArrayField(raw: string): string[] {
@@ -182,7 +204,8 @@ function getSubagentSystemPrompt(
   workspacePath: string,
   agent: AgentRow,
   assignedSkills: SkillDefinition[],
-  skillMode: AgentSkillMode
+  skillMode: AgentSkillMode,
+  invocationContext?: string
 ): string {
   const basePrompt = getSystemPrompt(workspacePath)
   const profileSection = `
@@ -195,7 +218,10 @@ Specialized instructions:
 ${agent.system_prompt}
 `
 
-  return applySkillRegistryPrompt(`${profileSection}\n${basePrompt}`, skillMode, assignedSkills)
+  return applyInvocationContextPrompt(
+    applySkillRegistryPrompt(`${profileSection}\n${basePrompt}`, skillMode, assignedSkills),
+    invocationContext
+  )
 }
 
 function applyDelegationRosterPrompt(basePrompt: string, subagents: SubAgent[]): string {
@@ -307,6 +333,8 @@ export interface CreateAgentRuntimeOptions {
     skillMode?: AgentSkillMode
     skillsAllowlist?: string[]
   }
+  /** Optional context assembled from @file mentions for this invocation */
+  invocationContext?: string
 }
 
 const BASE_RUNTIME_TOOL_POLICY_TARGETS = [
@@ -990,6 +1018,7 @@ function buildDelegationSubagents(params: {
   fallbackModel: RuntimeModel
   securityDefaults: SecurityDefaults
   toolPolicyContext: RuntimeToolPolicyContext
+  invocationContext?: string
 }): SubAgent[] {
   const agents = listAgents(params.workspaceId).filter((agent) => agent.is_orchestrator !== 1)
   if (agents.length === 0) {
@@ -1023,7 +1052,13 @@ function buildDelegationSubagents(params: {
     return {
       name: toSubagentType(agent.name, usedSubagentTypes),
       description: `${agent.name}: ${agent.role}`,
-      systemPrompt: getSubagentSystemPrompt(params.workspacePath, agent, assignedSkills, skillMode),
+      systemPrompt: getSubagentSystemPrompt(
+        params.workspacePath,
+        agent,
+        assignedSkills,
+        skillMode,
+        params.invocationContext
+      ),
       model: resolveSubagentModel(agent.model_name, params.fallbackModel),
       interruptOn: policyConfig.interruptOn,
       middleware: [policyMiddleware]
@@ -1035,7 +1070,7 @@ function buildDelegationSubagents(params: {
 export type AgentRuntime = ReturnType<typeof createDeepAgent>
 
 export async function createAgentRuntime(options: CreateAgentRuntimeOptions) {
-  const { threadId, modelId, workspacePath, workspaceId, speaker } = options
+  const { threadId, modelId, workspacePath, workspaceId, speaker, invocationContext } = options
   const effectiveWorkspaceId = workspaceId || DEFAULT_WORKSPACE_ID
 
   if (!threadId) {
@@ -1085,6 +1120,7 @@ export async function createAgentRuntime(options: CreateAgentRuntimeOptions) {
     workspacePath,
     runtimeSkills,
     runtimeSkillMode,
+    invocationContext,
     speaker
   )
   const securityDefaults = getSecurityDefaults()
@@ -1173,7 +1209,8 @@ export async function createAgentRuntime(options: CreateAgentRuntimeOptions) {
           workspaceId: effectiveWorkspaceId,
           fallbackModel: model,
           securityDefaults,
-          toolPolicyContext
+          toolPolicyContext,
+          invocationContext
         })
   const systemPrompt =
     speaker?.type === "agent"

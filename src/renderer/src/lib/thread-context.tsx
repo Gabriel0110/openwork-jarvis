@@ -55,7 +55,10 @@ type StreamInstance = ReturnType<
   typeof useStream<
     Record<string, unknown>,
     {
-      UpdateType: { messages: Array<{ content: string; type: string }> } | null
+      UpdateType: {
+        messages: Array<{ content: string; type: string }>
+        referencedFiles?: string[]
+      } | null
       ConfigurableType: {
         thread_id: string
         model_id?: string
@@ -191,7 +194,10 @@ function ThreadStreamHolder({
   const stream = useStream<
     Record<string, unknown>,
     {
-      UpdateType: { messages: Array<{ content: string; type: string }> } | null
+      UpdateType: {
+        messages: Array<{ content: string; type: string }>
+        referencedFiles?: string[]
+      } | null
       ConfigurableType: {
         thread_id: string
         model_id?: string

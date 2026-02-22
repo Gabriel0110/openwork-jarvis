@@ -110,10 +110,13 @@ export class ElectronIPCTransport implements UseStreamTransport {
 
     // Extract the message content from input
     const input = payload.input as
-      | { messages?: Array<{ content: string; type: string }> }
+      | { messages?: Array<{ content: string; type: string }>; referencedFiles?: string[] }
       | null
       | undefined
     const messages = input?.messages ?? []
+    const referencedFiles = Array.isArray(input?.referencedFiles)
+      ? input.referencedFiles.filter((item): item is string => typeof item === "string")
+      : []
     const lastHumanMessage = messages.find((m) => m.type === "human")
     const messageContent = lastHumanMessage?.content ?? ""
 
@@ -134,7 +137,8 @@ export class ElectronIPCTransport implements UseStreamTransport {
         | "agent"
         | "zeroclaw"
         | undefined,
-      payload.config?.configurable?.speaker_agent_id as string | undefined
+      payload.config?.configurable?.speaker_agent_id as string | undefined,
+      referencedFiles
     )
   }
 
@@ -152,7 +156,8 @@ export class ElectronIPCTransport implements UseStreamTransport {
     signal: AbortSignal,
     modelId?: string,
     speakerType?: "orchestrator" | "agent" | "zeroclaw",
-    speakerAgentId?: string
+    speakerAgentId?: string,
+    referencedFiles?: string[]
   ): AsyncGenerator<StreamEvent> {
     // Create a queue to buffer events from IPC
     const eventQueue: StreamEvent[] = []
@@ -201,7 +206,8 @@ export class ElectronIPCTransport implements UseStreamTransport {
       },
       modelId,
       speakerType,
-      speakerAgentId
+      speakerAgentId,
+      referencedFiles
     )
     const cleanupOnce = (): void => {
       if (didCleanup) {

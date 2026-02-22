@@ -1,5 +1,14 @@
 # TODO
 
+## Workspace File Mentions in Chat (Current Task)
+
+- [x] Add `@` mention parsing + autocomplete UI in chat composer (keyboard + click selection)
+- [x] Reuse workspace file inventory for suggestions with sensible filtering/ranking
+- [x] Resolve mentioned file paths in main process and build safe, bounded context blocks
+- [x] Inject file context into agent/ZeroClaw invocation payloads without polluting displayed user messages
+- [x] Add unit tests for mention parsing/context assembly edge cases
+- [x] Validate with lint + typecheck + targeted tests
+
 ## Full PTY Terminal Upgrade (Current Task)
 
 - [x] Audit existing terminal dock + IPC integration state
@@ -98,6 +107,20 @@
   - Added per-run task execution mode plumbing (`taskExecutionMode`) through shared types and preload bridge.
   - Added harness retention cleanup for isolated workspace copies under `~/.openwork/harness/workspaces`.
   - Extended retention result reporting to include removed workspace copy count and surfaced it in Harness UI status messaging.
+  - Validation completed:
+    - `npm run lint`
+    - `npm run typecheck`
+    - `npm run test`
+    - `npm run build`
+- Workspace file mention support completed:
+  - Added `@file` autocomplete in the chat composer using current workspace file inventory.
+  - Implemented keyboard (`↑`/`↓`/`Enter`/`Tab`/`Esc`) and mouse selection for mention insertion at cursor.
+  - Added main-process mention resolution with workspace confinement, traversal protection, size/binary guards, and truncation limits.
+  - Injected mention-derived file context into runtime/ZeroClaw request context without altering displayed user chat messages.
+  - Added Codex/Cursor-style attached file chips in composer with click-to-open and remove affordances.
+  - Added explicit `referencedFiles` transport path so selected chips are passed as context attachments even when not left inline in message text.
+  - Disabled composer spellcheck/autocorrect to avoid macOS NSSpellServer first-mention stalls.
+  - Added unit coverage for mention extraction/context assembly (`tests/unit/workspace-file-mentions.test.ts`).
   - Validation completed:
     - `npm run lint`
     - `npm run typecheck`
