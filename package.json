@@ -1,5 +1,5 @@
 {
-  "name": "openwork-jarvis",
+  "name": "openwork-atlas",
   "version": "0.1.0",
   "description": "A local-first personal AI enterprise desktop app powered by deepagents",
   "main": "./out/main/index.js",
@@ -12,23 +12,23 @@
   ],
   "bin": {
     "openwork": "./bin/cli.js",
-    "openwork-jarvis": "./bin/cli.js"
+    "openwork-atlas": "./bin/cli.js"
   },
   "author": "LangChain",
   "license": "MIT",
-  "homepage": "https://github.com/langchain-ai/openwork",
+  "homepage": "https://github.com/Gabriel0110/openwork-atlas",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/langchain-ai/openwork.git"
+    "url": "git+https://github.com/Gabriel0110/openwork-atlas.git"
   },
   "bugs": {
-    "url": "https://github.com/langchain-ai/openwork/issues"
+    "url": "https://github.com/Gabriel0110/openwork-atlas/issues"
   },
   "keywords": [
     "ai",
     "agent",
     "electron",
-    "jarvis",
+    "atlas",
     "deepagents",
     "langchain",
     "langgraph",

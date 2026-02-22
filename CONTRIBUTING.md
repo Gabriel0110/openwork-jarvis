@@ -1,10 +1,10 @@
-# Contributing to openwork-jarvis
+# Contributing to openwork-atlas
 
 Thanks for contributing.
 
 ## Prerequisites
 
-- Node.js `>=20.19.0` (see `/Users/gtomberlin/Documents/Code/openwork-jarvis/.nvmrc`)
+- Node.js `>=20.19.0` (see `/Users/gtomberlin/Documents/Code/openwork-atlas/.nvmrc`)
 - npm 10+
 - Git
 
@@ -44,8 +44,8 @@ npm run test:smoke:build
 
 ## Testing
 
-- Unit tests: Vitest (`/Users/gtomberlin/Documents/Code/openwork-jarvis/tests/unit`)
-- Smoke tests: Playwright Electron launch checks (`/Users/gtomberlin/Documents/Code/openwork-jarvis/tests/smoke`)
+- Unit tests: Vitest (`/Users/gtomberlin/Documents/Code/openwork-atlas/tests/unit`)
+- Smoke tests: Playwright Electron launch checks (`/Users/gtomberlin/Documents/Code/openwork-atlas/tests/smoke`)
 
 ## Coding Rules
 

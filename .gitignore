@@ -5,3 +5,10 @@ out
 .eslintcache
 *.log*
 release
+.env
+.env.local
+.env.*.local
+playwright-report
+test-results
+coverage
+*.tsbuildinfo

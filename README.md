@@ -1,6 +1,6 @@
-# openwork-jarvis
+# openwork-atlas
 
-Openwork-Jarvis is a local-first desktop app for running a personal multi-agent AI workspace.
+Openwork-Atlas is a local-first desktop app for running a personal multi-agent AI workspace.
 It is built on top of deepagents and the Openwork architecture baseline, then extended for
 agent orchestration, policy-gated actions, and operator-focused observability.
 
@@ -10,7 +10,7 @@ agent orchestration, policy-gated actions, and operator-focused observability.
 > This app can execute shell commands and modify files in linked workspaces. Keep approval
 > gates enabled for destructive actions and only use trusted directories.
 
-## What Openwork-Jarvis Adds Over OpenWork
+## What Openwork-Atlas Adds Over OpenWork
 
 ### Highlights
 
@@ -138,8 +138,7 @@ npm ci
 npm run dev
 ```
 
-Optional: copy `/Users/gtomberlin/Documents/Code/openwork-jarvis/.env.example` to `.env` for local
-provider key/env overrides.
+Optional: copy `.env.example` to `.env` for local provider key/env overrides.
 
 ## Scripts
 
@@ -156,22 +155,20 @@ provider key/env overrides.
 
 ## Architecture
 
-See `/Users/gtomberlin/Documents/Code/openwork-jarvis/docs/architecture/README.md` for the
-current domain boundaries and implementation direction.
+See `docs/architecture/README.md` for the current domain boundaries and implementation direction.
 
 ## Starter Packs
 
-- Agent packs: `/Users/gtomberlin/Documents/Code/openwork-jarvis/agent-packs`
-- Template packs: `/Users/gtomberlin/Documents/Code/openwork-jarvis/template-packs`
+- Agent packs: `agent-packs/`
+- Template packs: `template-packs/`
 
 These folders contain import-ready bundle examples for the Agents and Templates views.
 Bundle formats are additive and portable across workspaces.
 
 ## Contributing
 
-See `/Users/gtomberlin/Documents/Code/openwork-jarvis/CONTRIBUTING.md` for setup, workflow,
-and quality gates.
+See `CONTRIBUTING.md` for setup, workflow, and quality gates.
 
 ## License
 
-MIT. See `/Users/gtomberlin/Documents/Code/openwork-jarvis/LICENSE`.
+MIT. See `LICENSE`.

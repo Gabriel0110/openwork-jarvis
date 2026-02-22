@@ -373,7 +373,7 @@ Widgets:
 - Tool registry (capabilities exposed)
 - Tool test console (safe sandbox)
 
-Implementation status (`openwork-jarvis`):
+Implementation status (`openwork-atlas`):
 
 - [x] Installed skills + in-app skill detail review
 - [x] MCP server visibility + connector surface summary
@@ -458,7 +458,7 @@ Acceptance criteria:
 
 1. Fork OpenWork.
 2. Keep upstream mergeable:
-   - isolate your changes under `packages/jarvis-*` (or similar)
+   - isolate your changes under `packages/atlas-*` (or similar)
    - avoid rewriting core unless necessary
 
 3. Add new modules:
@@ -676,7 +676,7 @@ Each agent ships with:
 - “template packs” folder
 - “agent packs” folder
 
-Implementation status (`openwork-jarvis`):
+Implementation status (`openwork-atlas`):
 
 - [x] `CONTRIBUTING.md` + `SECURITY.md` published
 - [x] `.env.example` template committed with no secrets

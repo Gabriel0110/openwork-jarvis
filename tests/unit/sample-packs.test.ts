@@ -9,7 +9,7 @@ function readJson(pathFromRoot: string): unknown {
 
 describe("sample packs", () => {
   it("agent starter pack matches expected bundle shape", () => {
-    const raw = readJson("agent-packs/starter-jarvis-pack.json") as Record<string, unknown>
+    const raw = readJson("agent-packs/starter-atlas-pack.json") as Record<string, unknown>
     expect(raw.version).toBe("1")
     expect(typeof raw.exportedAt).toBe("string")
     expect(typeof raw.workspaceId).toBe("string")

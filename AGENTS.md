@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for coding agents working in `openwork-jarvis`.
+Guidance for coding agents working in `openwork-atlas`.
 This repository is an Electron + React + TypeScript desktop app.
 
 NOTE: Always write great code. This is a non-negotiable.

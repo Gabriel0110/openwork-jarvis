@@ -1,6 +1,6 @@
-# Openwork-Jarvis Architecture (Phase 0 Baseline)
+# Openwork-Atlas Architecture (Phase 0 Baseline)
 
-This document defines the implementation baseline for the Openwork-Jarvis roadmap.
+This document defines the implementation baseline for the Openwork-Atlas roadmap.
 
 ## Core Principles
 
@@ -12,20 +12,20 @@ This document defines the implementation baseline for the Openwork-Jarvis roadma
 ## Runtime Layers
 
 1. Electron shell and preload bridge:
-   `/Users/gtomberlin/Documents/Code/openwork-jarvis/src/main/index.ts`,
-   `/Users/gtomberlin/Documents/Code/openwork-jarvis/src/preload/index.ts`
+   `/Users/gtomberlin/Documents/Code/openwork-atlas/src/main/index.ts`,
+   `/Users/gtomberlin/Documents/Code/openwork-atlas/src/preload/index.ts`
 2. Main-process domain services and IPC handlers:
-   `/Users/gtomberlin/Documents/Code/openwork-jarvis/src/main`
+   `/Users/gtomberlin/Documents/Code/openwork-atlas/src/main`
 3. Deepagents execution runtime:
-   `/Users/gtomberlin/Documents/Code/openwork-jarvis/src/main/agent`
+   `/Users/gtomberlin/Documents/Code/openwork-atlas/src/main/agent`
 4. Renderer UI, state, and stream transport:
-   `/Users/gtomberlin/Documents/Code/openwork-jarvis/src/renderer/src`
+   `/Users/gtomberlin/Documents/Code/openwork-atlas/src/renderer/src`
 
 ## Data and Migrations
 
 - SQLite storage is managed by `sql.js`.
 - Schema evolution is migration-driven via:
-  `/Users/gtomberlin/Documents/Code/openwork-jarvis/src/main/db/migrations`
+  `/Users/gtomberlin/Documents/Code/openwork-atlas/src/main/db/migrations`
 - `schema_migrations` tracks applied migrations.
 
 ## Current Domain Boundaries

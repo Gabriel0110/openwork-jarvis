@@ -1,4 +1,5 @@
-export const APP_THEME_STORAGE_KEY = "openwork-jarvis.theme"
+export const APP_THEME_STORAGE_KEY = "openwork-atlas.theme"
+const LEGACY_THEME_STORAGE_KEY = "openwork-jarvis.theme"
 
 export const APP_THEMES = ["default", "human", "orc", "undead", "night-elf"] as const
 
@@ -15,7 +16,18 @@ export function getStoredTheme(): AppTheme {
   if (typeof window === "undefined") {
     return "default"
   }
-  return normalizeTheme(window.localStorage.getItem(APP_THEME_STORAGE_KEY))
+
+  const storedTheme = window.localStorage.getItem(APP_THEME_STORAGE_KEY)
+  if (storedTheme) {
+    return normalizeTheme(storedTheme)
+  }
+
+  const legacyTheme = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY)
+  const normalized = normalizeTheme(legacyTheme)
+  if (legacyTheme) {
+    window.localStorage.setItem(APP_THEME_STORAGE_KEY, normalized)
+  }
+  return normalized
 }
 
 export function applyTheme(theme: AppTheme): void {

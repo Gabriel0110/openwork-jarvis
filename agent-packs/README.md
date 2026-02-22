@@ -4,7 +4,7 @@ This directory stores portable agent bundle examples for import/export workflows
 
 ## Files
 
-- `starter-jarvis-pack.json`: baseline multi-agent roster aligned with the PRD.
+- `starter-atlas-pack.json`: baseline multi-agent roster aligned with the PRD.
 
 ## Usage
 
